@@ -1,0 +1,43 @@
+{
+  "name": "worktree-cli",
+  "version": "1.1.0",
+  "description": "CLI tool for managing git worktrees with smart environment setup",
+  "type": "module",
+  "bin": {
+    "wtr": "./dist/cli.js",
+    "worktree-cli": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "biome check src",
+    "lint:fix": "biome check --write src",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "worktree",
+    "cli",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^14.0.0",
+    "@clack/prompts": "^0.11.0",
+    "picocolors": "^1.1.0",
+    "cli-table3": "^0.6.5"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.0",
+    "tsup": "^8.0.0",
+    "@types/node": "^22.0.0",
+    "@biomejs/biome": "^1.9.0"
+  }
+}
