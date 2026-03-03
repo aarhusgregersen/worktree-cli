@@ -45,7 +45,7 @@ export const addCommand = new Command("add")
   .option("--detach", "Create in detached HEAD state")
   .option("--no-copy", "Skip copying files from main worktree")
   .option("--no-bump", "Skip port bumping")
-  .option("--open", "Open a new terminal window at the worktree path")
+  .option("--open", "Open a new terminal window with Claude Code")
   .option(
     "--plan <text>",
     "Open terminal with Claude Code and a plan (implies --open)",
@@ -233,8 +233,9 @@ export const addCommand = new Command("add")
         openTerminalWindow({ cwd: worktreePath, command, env });
         log.info("Opened terminal with Claude Code");
       } else if (options.open) {
-        openTerminalWindow({ cwd: worktreePath, env });
-        log.info("Opened terminal at worktree path");
+        const command = buildClaudeCommand();
+        openTerminalWindow({ cwd: worktreePath, command, env });
+        log.info("Opened terminal with Claude Code");
       }
 
       outro(

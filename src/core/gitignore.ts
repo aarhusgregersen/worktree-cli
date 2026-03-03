@@ -25,8 +25,8 @@ const COMMON_CONFIG_PATTERNS = [
     recommended: true,
   },
   {
-    pattern: ".claude/",
-    reason: "Claude Code configuration",
+    pattern: ".claude/settings.local.json",
+    reason: "Claude Code local settings",
     recommended: true,
   },
   {

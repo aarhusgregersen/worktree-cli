@@ -84,31 +84,38 @@ wtr diff 1 --uncommitted --json
 
 ### Create a worktree and start working
 
+There are two workflows for spinning up a new worktree with Claude:
+
+**Interactive — continue planning with Claude:**
+
 ```bash
-wtr add feature/my-feature --json
+wtr add feature/auth --open
 ```
 
-### Delegate a task to another Claude instance
+This creates the worktree and opens a new terminal with Claude running interactively. Use this when you're still exploring the problem or want to plan collaboratively with Claude before implementing.
 
-Create a worktree and launch a new Claude session with a plan. **Omit `--json`** so the terminal opens directly:
+**With a plan — delegate implementation:**
 
 ```bash
-# Inline plan text (no --json — opens a new terminal window)
+# Inline plan text
 wtr add feature/auth --plan "Implement JWT authentication middleware"
 
 # Or from a file
 wtr add feature/auth --plan-file /path/to/plan.md
 ```
 
-This creates the worktree, opens a new terminal via osascript (inside wtr's process — no nested Claude session), and starts Claude with the given plan. Use this to parallelize independent work across multiple worktrees.
+This creates the worktree, opens a new terminal, and starts Claude with the given plan so implementation begins immediately. Use this to parallelize independent work across multiple worktrees.
+
+Both commands open terminals via osascript inside `wtr`'s own process — no nested Claude session is created. **Omit `--json`** so the terminal opens directly.
 
 You can also launch Claude in an existing worktree:
 
 ```bash
-wtr open 2 --plan "Fix the failing tests"
+wtr open 2 --claude             # interactive
+wtr open 2 --plan "Fix the failing tests"  # with a plan
 ```
 
-> **Why no `--json`?** Terminal-spawning commands use osascript which runs inside `wtr`'s own process. This is safe from Claude Code — no nested session is created. Pass `--json` only when you need structured output without opening a terminal (e.g., `wtr add feature/x --plan "..." --json` returns the command/planPath fields without opening anything).
+> **When to use `--json`:** Pass `--json` only when you need structured output without opening a terminal (e.g., for agentic pipelines). With `--json`, `wtr add --plan` returns the command/planPath fields without opening anything.
 
 ### Check which worktrees have Claude active
 
@@ -155,7 +162,7 @@ External service ports (DATABASE_URL, REDIS_URL, etc.) are never changed.
 | "Is Claude already working on something?" | `wtr status --json` (check `claude` field) |
 | "Create a PR for worktree 1" | `wtr pr 1 --title "..." --json` |
 | "Clean up merged branches" | `wtr cleanup --delete-branches --json` |
-| "Start a new parallel task" | `wtr add feature/name --json` |
+| "Start a new parallel task (interactive)" | `wtr add feature/name --open` (no `--json`) |
 | "Delegate a task to another Claude" | `wtr add feature/name --plan "..."` (no `--json`) |
 | "Open Claude in an existing worktree" | `wtr open 2 --claude` (no `--json`) |
 | "Remove a specific worktree" | `wtr remove 2 --delete-branch --json` |

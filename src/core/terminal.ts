@@ -51,6 +51,12 @@ export const buildClaudeCommand = (planPath?: string): string => {
   return "claude";
 };
 
+// Shell command that emits an OSC 7 escape sequence reporting the current
+// working directory.  Terminals (iTerm2, Apple Terminal, Ghostty, …) use
+// this to track the cwd so that "new tab in same directory" works even when
+// a long-running process like `claude` prevents the shell from updating it.
+const OSC7_PRINTF = `printf '\\033]7;file://%s%s\\033\\\\' "$(hostname)" "$(pwd)"`;
+
 export const openTerminalWindow = (opts: {
   readonly cwd: string;
   readonly command?: string;
@@ -64,7 +70,7 @@ export const openTerminalWindow = (opts: {
     : "";
   const prefix = envExports ? `${envExports} && ` : "";
   const fullCommand = opts.command
-    ? `${prefix}cd ${escapeShell(opts.cwd)} && ${opts.command}`
+    ? `${prefix}cd ${escapeShell(opts.cwd)} && ${OSC7_PRINTF} && ${opts.command}`
     : `${prefix}cd ${escapeShell(opts.cwd)}`;
 
   switch (terminal) {
