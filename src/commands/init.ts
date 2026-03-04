@@ -2,6 +2,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import { addToGitignore, configExists, saveConfig } from "../config/loader.js";
 import { CONFIG_FILENAME, type WtConfig } from "../config/schema.js";
+import { ErrorCode } from "../core/errors.js";
 import { getGitRoot, isGitRepository } from "../core/git.js";
 import { getSuggestions } from "../core/gitignore.js";
 import { formatError } from "../output/formatter.js";
@@ -24,7 +25,8 @@ export const initCommand = new Command("init")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -150,7 +152,9 @@ export const initCommand = new Command("init")
       note(summary, "Configuration");
 
       outro(
-        pc.green("wtr initialized! Run `wtr add <branch>` to create a worktree."),
+        pc.green(
+          "wtr initialized! Run `wtr add <branch>` to create a worktree.",
+        ),
       );
     }
   });

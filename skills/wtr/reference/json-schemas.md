@@ -1,6 +1,15 @@
 # wtr JSON Output Schemas
 
-All commands support `--json`. Errors output `{ "error": "message" }` to stderr.
+All commands support `--json`. Errors output `{ "error": "message", "code": "ERROR_CODE" }` to stderr. The `code` field is present for well-known errors (see Error Codes below).
+
+## Error Format
+
+```json
+{
+  "error": "Worktree not found: foo",
+  "code": "WORKTREE_NOT_FOUND"
+}
+```
 
 ## `wtr list --json`
 
@@ -13,7 +22,8 @@ All commands support `--json`. Errors output `{ "error": "message" }` to stderr.
     "isLocked": false,
     "isPrunable": false,
     "isMain": false,
-    "isDetached": false
+    "isDetached": false,
+    "lastCommit": "2026-03-04T10:00:00+00:00"
   }
 ]
 ```
@@ -43,7 +53,8 @@ All commands support `--json`. Errors output `{ "error": "message" }` to stderr.
       "state": "OPEN",
       "isDraft": false
     },
-    "claude": false
+    "claude": false,
+    "lastCommit": "2 hours ago"
   }
 ]
 ```
@@ -66,12 +77,83 @@ The `pr` field is `null` when no PR exists or `--no-pr` is used.
       ]
     }
   ],
+  "portOffset": 100,
   "command": "claude \"$(cat /tmp/wtr-plan-xxx.md)\"",
   "planPath": "/tmp/wtr-plan-xxx.md"
 }
 ```
 
-The `command` and `planPath` fields are only present when `--plan` or `--plan-file` is used. They are omitted otherwise.
+The `command` and `planPath` fields are only present when `--plan` or `--plan-file` is used. `portOffset` is the total offset applied.
+
+## `wtr current --json`
+
+```json
+{
+  "path": "/path/to/worktree",
+  "branch": "feature/auth",
+  "isMain": false,
+  "head": "abc1234..."
+}
+```
+
+## `wtr cd <id> --json`
+
+```json
+{
+  "path": "/path/to/worktree",
+  "branch": "feature/auth"
+}
+```
+
+## `wtr exec <id> <cmd...> --json`
+
+```json
+{
+  "path": "/path/to/worktree",
+  "branch": "feature/auth",
+  "exitCode": 0,
+  "stdout": "...",
+  "stderr": ""
+}
+```
+
+## `wtr each <cmd...> --json`
+
+```json
+{
+  "results": [
+    {
+      "path": "/path/to/worktree",
+      "branch": "feature/auth",
+      "exitCode": 0,
+      "stdout": "...",
+      "stderr": ""
+    }
+  ]
+}
+```
+
+## `wtr sync --json`
+
+```json
+{
+  "defaultBranch": "main",
+  "strategy": "rebase",
+  "results": [
+    {
+      "path": "/path/to/worktree",
+      "branch": "feature/auth",
+      "success": true
+    },
+    {
+      "path": "/path/to/other",
+      "branch": "feature/old",
+      "success": false,
+      "error": "CONFLICT (content): Merge conflict in src/app.ts"
+    }
+  ]
+}
+```
 
 ## `wtr remove <id> --json`
 
@@ -92,7 +174,13 @@ Does NOT open a terminal. Returns what would run:
 {
   "path": "/path/to/worktree",
   "branch": "feature/auth",
-  "command": "claude --plan /tmp/plan-xxx.md"
+  "command": "claude \"$(cat /tmp/plan-xxx.md)\"",
+  "env": {
+    "WT_ACTIVE": "1",
+    "WT_NAME": "worktree",
+    "WT_BRANCH": "feature/auth",
+    "WT_PATH": "/path/to/worktree"
+  }
 }
 ```
 

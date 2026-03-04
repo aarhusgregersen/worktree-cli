@@ -92,3 +92,43 @@ export const getCommitsAhead = async (
   if (!result.ok) return -1; // Unknown, treat as having changes
   return Number.parseInt(result.value.stdout.trim(), 10);
 };
+
+export const fetchOrigin = async (
+  cwd?: string,
+): Promise<Result<void, Error>> => {
+  const result = await executeGitCommand(["fetch", "origin"], { cwd });
+  return result.ok ? ok(undefined) : result;
+};
+
+export const rebaseOnto = async (
+  target: string,
+  cwd?: string,
+): Promise<Result<void, Error>> => {
+  const result = await executeGitCommand(["rebase", `origin/${target}`], {
+    cwd,
+  });
+  return result.ok ? ok(undefined) : result;
+};
+
+export const mergeFrom = async (
+  target: string,
+  cwd?: string,
+): Promise<Result<void, Error>> => {
+  const result = await executeGitCommand(
+    ["merge", `origin/${target}`, "--no-edit"],
+    { cwd },
+  );
+  return result.ok ? ok(undefined) : result;
+};
+
+export const getLastCommitDate = async (
+  format: string,
+  cwd?: string,
+): Promise<string> => {
+  const result = await executeGitCommand(
+    ["log", "-1", `--format=${format}`],
+    { cwd },
+  );
+  if (!result.ok) return "";
+  return result.value.stdout.trim();
+};

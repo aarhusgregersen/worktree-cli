@@ -6,6 +6,7 @@ import {
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
+import { ErrorCode } from "../core/errors.js";
 import { isGitRepository } from "../core/git.js";
 import {
   type WorktreeInfo,
@@ -41,7 +42,8 @@ export const removeCommand = new Command("remove")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -56,21 +58,32 @@ export const removeCommand = new Command("remove")
     let worktree: WorktreeInfo | undefined;
     if (!pathArg) {
       if (json) {
-        printJsonError("Worktree identifier required in --json mode");
+        printJsonError(
+          "Worktree identifier required in --json mode",
+          ErrorCode.IDENTIFIER_REQUIRED,
+        );
         process.exit(1);
       }
       worktree = await selectWorktree(listResult.value);
     } else {
       worktree = findWorktree(listResult.value, pathArg);
       if (!worktree) {
-        if (json) printJsonError(`Worktree not found: ${pathArg}`);
+        if (json)
+          printJsonError(
+            `Worktree not found: ${pathArg}`,
+            ErrorCode.WORKTREE_NOT_FOUND,
+          );
         console.error(formatError(`Worktree not found: ${pathArg}`));
         process.exit(1);
       }
     }
 
     if (worktree.isMain) {
-      if (json) printJsonError("Cannot remove the main worktree");
+      if (json)
+        printJsonError(
+          "Cannot remove the main worktree",
+          ErrorCode.CANNOT_REMOVE_MAIN,
+        );
       console.error(formatError("Cannot remove the main worktree"));
       process.exit(1);
     }
@@ -102,7 +115,11 @@ export const removeCommand = new Command("remove")
           formatWarning("Worktree is locked. Use --force to remove anyway."),
         );
       if (!options.force) {
-        if (json) printJsonError("Worktree is locked. Use --force to remove.");
+        if (json)
+          printJsonError(
+            "Worktree is locked. Use --force to remove.",
+            ErrorCode.WORKTREE_LOCKED,
+          );
         process.exit(1);
       }
     }

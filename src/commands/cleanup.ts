@@ -6,6 +6,7 @@ import {
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
+import { ErrorCode } from "../core/errors.js";
 import { getPrForBranch } from "../core/gh.js";
 import { isGitRepository } from "../core/git.js";
 import { hasUncommittedChanges } from "../core/status.js";
@@ -28,7 +29,9 @@ interface CleanupCandidate {
 }
 
 export const cleanupCommand = new Command("cleanup")
-  .description("Remove worktrees with merged branches")
+  .description(
+    "Remove worktrees whose branches have been merged (via git or PR)",
+  )
   .option("--dry-run", "Show candidates without removing")
   .option("--delete-branches", "Also delete associated branches")
   .option(
@@ -41,7 +44,8 @@ export const cleanupCommand = new Command("cleanup")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }

@@ -9,12 +9,6 @@ import { basename, dirname, join } from "node:path";
 import { isExcludedPort } from "../config/schema.js";
 import { type Result, err, ok } from "../utils/result.js";
 
-interface EnvVar {
-  readonly key: string;
-  readonly value: string;
-  readonly line: string;
-}
-
 interface PortBumpResult {
   readonly file: string;
   readonly changes: readonly {
@@ -24,9 +18,9 @@ interface PortBumpResult {
   }[];
 }
 
-const PORT_PATTERN =
+export const PORT_PATTERN =
   /^([A-Z_][A-Z0-9_]*(?:PORT|_PORT)[A-Z0-9_]*)=["']?(\d+)["']?$/i;
-const URL_PORT_PATTERN =
+export const URL_PORT_PATTERN =
   /^([A-Z_][A-Z0-9_]*(?:URL|URI|HOST)[A-Z0-9_]*)=["']?(.+:)(\d+)(.*?)["']?$/i;
 
 export const copyFiles = (
@@ -102,6 +96,59 @@ const findEnvFiles = (dir: string): string[] => {
   return files;
 };
 
+export const transformPortLines = (
+  lines: readonly string[],
+  offset: number,
+  exclusions: readonly string[],
+): {
+  newLines: string[];
+  changes: { key: string; oldPort: number; newPort: number }[];
+} => {
+  const changes: { key: string; oldPort: number; newPort: number }[] = [];
+  const newLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      newLines.push(line);
+      continue;
+    }
+
+    const portMatch = trimmed.match(PORT_PATTERN);
+    if (portMatch) {
+      const key = portMatch[1];
+      const portStr = portMatch[2];
+
+      if (key && portStr && !isExcludedPort(key, exclusions)) {
+        const oldPort = Number.parseInt(portStr, 10);
+        const newPort = oldPort + offset;
+        changes.push({ key, oldPort, newPort });
+        newLines.push(line.replace(`=${portStr}`, `=${newPort}`));
+        continue;
+      }
+    }
+
+    const urlMatch = trimmed.match(URL_PORT_PATTERN);
+    if (urlMatch) {
+      const key = urlMatch[1];
+      const portStr = urlMatch[3];
+
+      if (key && portStr && !isExcludedPort(key, exclusions)) {
+        const oldPort = Number.parseInt(portStr, 10);
+        const newPort = oldPort + offset;
+        changes.push({ key, oldPort, newPort });
+        newLines.push(line.replace(`:${portStr}`, `:${newPort}`));
+        continue;
+      }
+    }
+
+    newLines.push(line);
+  }
+
+  return { newLines, changes };
+};
+
 const bumpPortsInFile = (
   filePath: string,
   offset: number,
@@ -110,47 +157,7 @@ const bumpPortsInFile = (
   try {
     const content = readFileSync(filePath, "utf-8");
     const lines = content.split("\n");
-    const changes: { key: string; oldPort: number; newPort: number }[] = [];
-    const newLines: string[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      if (!trimmed || trimmed.startsWith("#")) {
-        newLines.push(line);
-        continue;
-      }
-
-      const portMatch = trimmed.match(PORT_PATTERN);
-      if (portMatch) {
-        const key = portMatch[1];
-        const portStr = portMatch[2];
-
-        if (key && portStr && !isExcludedPort(key, exclusions)) {
-          const oldPort = Number.parseInt(portStr, 10);
-          const newPort = oldPort + offset;
-          changes.push({ key, oldPort, newPort });
-          newLines.push(line.replace(`=${portStr}`, `=${newPort}`));
-          continue;
-        }
-      }
-
-      const urlMatch = trimmed.match(URL_PORT_PATTERN);
-      if (urlMatch) {
-        const key = urlMatch[1];
-        const portStr = urlMatch[3];
-
-        if (key && portStr && !isExcludedPort(key, exclusions)) {
-          const oldPort = Number.parseInt(portStr, 10);
-          const newPort = oldPort + offset;
-          changes.push({ key, oldPort, newPort });
-          newLines.push(line.replace(`:${portStr}`, `:${newPort}`));
-          continue;
-        }
-      }
-
-      newLines.push(line);
-    }
+    const { newLines, changes } = transformPortLines(lines, offset, exclusions);
 
     if (changes.length > 0) {
       writeFileSync(filePath, newLines.join("\n"));

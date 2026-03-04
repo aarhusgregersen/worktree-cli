@@ -9,6 +9,7 @@ import {
 } from "../config/loader.js";
 import { branchExists } from "../core/branch.js";
 import { bumpPortsInEnvFiles, copyFiles } from "../core/env.js";
+import { ErrorCode } from "../core/errors.js";
 import {
   getGitRoot,
   getMainWorktreePath,
@@ -34,6 +35,7 @@ import {
 } from "../output/formatter.js";
 import { printJson, printJsonError } from "../output/json.js";
 import { intro, log, outro, spinner } from "../prompts/interactive.js";
+import { readStdin } from "../utils/stdin.js";
 
 export const addCommand = new Command("add")
   .description("Create a new worktree")
@@ -48,7 +50,7 @@ export const addCommand = new Command("add")
   .option("--open", "Open a new terminal window with Claude Code")
   .option(
     "--plan <text>",
-    "Open terminal with Claude Code and a plan (implies --open)",
+    "Open terminal with Claude Code and a plan (implies --open). Use '-' to read from stdin.",
   )
   .option(
     "--plan-file <path>",
@@ -59,7 +61,8 @@ export const addCommand = new Command("add")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -86,7 +89,7 @@ export const addCommand = new Command("add")
       const enclosing = isInsideWorktree(listResult.value, process.cwd());
       if (enclosing) {
         const msg = `Cannot create a worktree inside another worktree (${enclosing.path}). Run this command from the main worktree instead.`;
-        if (json) printJsonError(msg);
+        if (json) printJsonError(msg, ErrorCode.INSIDE_WORKTREE);
         console.error(formatError(msg));
         process.exit(1);
       }
@@ -141,6 +144,7 @@ export const addCommand = new Command("add")
         file: string;
         changes: { key: string; oldPort: number; newPort: number }[];
       }[],
+      portOffset: 0,
     };
 
     if (configExists(repoRoot) || globalConfigExists()) {
@@ -182,6 +186,7 @@ export const addCommand = new Command("add")
             const worktreeIndex = indexResult.value - 1;
             if (worktreeIndex > 0) {
               const offset = config.portOffset * worktreeIndex;
+              jsonResult.portOffset = offset;
 
               s?.start(`Bumping ports by +${offset}`);
               const bumpResult = bumpPortsInEnvFiles(
@@ -223,9 +228,14 @@ export const addCommand = new Command("add")
       const env = buildWorktreeEnv({ path: worktreePath, branch });
 
       if (options.plan || options.planFile) {
-        const planText = options.planFile
-          ? readFileSync(options.planFile, "utf-8")
-          : options.plan;
+        let planText: string;
+        if (options.planFile) {
+          planText = readFileSync(options.planFile, "utf-8");
+        } else if (options.plan === "-") {
+          planText = await readStdin();
+        } else {
+          planText = options.plan;
+        }
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand(planPath);
         log.info(`Plan written to ${formatPath(planPath)}`);
@@ -243,9 +253,14 @@ export const addCommand = new Command("add")
       );
     } else {
       if (options.plan || options.planFile) {
-        const planText = options.planFile
-          ? readFileSync(options.planFile, "utf-8")
-          : options.plan;
+        let planText: string;
+        if (options.planFile) {
+          planText = readFileSync(options.planFile, "utf-8");
+        } else if (options.plan === "-") {
+          planText = await readStdin();
+        } else {
+          planText = options.plan;
+        }
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand(planPath);
         jsonResult.command = command;

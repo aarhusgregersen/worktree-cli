@@ -1,7 +1,12 @@
 import Table from "cli-table3";
 import { Command } from "commander";
 import pc from "picocolors";
-import { getCommitsAhead, getDefaultBranch } from "../core/branch.js";
+import {
+  getCommitsAhead,
+  getDefaultBranch,
+  getLastCommitDate,
+} from "../core/branch.js";
+import { ErrorCode } from "../core/errors.js";
 import { getPrForBranch } from "../core/gh.js";
 import { isGitRepository } from "../core/git.js";
 import {
@@ -24,7 +29,8 @@ export const statusCommand = new Command("status")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -62,20 +68,29 @@ export const statusCommand = new Command("status")
               isDraft: boolean;
             } | null,
             claude: false,
+            lastCommit: "",
           };
         }
 
-        const [ahead, diffResult, uncommittedResult, pushed, claude, pr] =
-          await Promise.all([
-            getCommitsAhead(wt.branch, defaultBranch),
-            getDiffStat(wt.branch, defaultBranch),
-            hasUncommittedChanges(wt.path),
-            isBranchPushed(wt.branch),
-            isClaudeActive(wt.path),
-            options.pr !== false
-              ? getPrForBranch(wt.branch)
-              : Promise.resolve(null),
-          ]);
+        const [
+          ahead,
+          diffResult,
+          uncommittedResult,
+          pushed,
+          claude,
+          pr,
+          lastCommit,
+        ] = await Promise.all([
+          getCommitsAhead(wt.branch, defaultBranch),
+          getDiffStat(wt.branch, defaultBranch),
+          hasUncommittedChanges(wt.path),
+          isBranchPushed(wt.branch),
+          isClaudeActive(wt.path),
+          options.pr !== false
+            ? getPrForBranch(wt.branch)
+            : Promise.resolve(null),
+          getLastCommitDate("%cr", wt.path),
+        ]);
 
         const diff = diffResult.ok
           ? diffResult.value
@@ -96,6 +111,7 @@ export const statusCommand = new Command("status")
           pushed,
           pr,
           claude,
+          lastCommit,
         };
       }),
     );
@@ -120,6 +136,7 @@ export const statusCommand = new Command("status")
         pc.bold("Pushed"),
         pc.bold("PR"),
         pc.bold("Claude"),
+        pc.bold("Activity"),
       ],
       style: {
         head: [],
@@ -136,6 +153,7 @@ export const statusCommand = new Command("status")
         ? `#${wt.pr.number} ${wt.pr.state.toLowerCase()}`
         : pc.dim("--");
       const claudeStr = wt.claude ? pc.green("Active") : pc.dim("--");
+      const activityStr = wt.lastCommit || pc.dim("--");
 
       table.push([
         pc.dim(String(i + 1)),
@@ -146,6 +164,7 @@ export const statusCommand = new Command("status")
         wt.pushed ? pc.green("Yes") : pc.dim("No"),
         prStr,
         claudeStr,
+        activityStr,
       ]);
     }
 

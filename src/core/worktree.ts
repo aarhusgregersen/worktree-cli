@@ -129,7 +129,7 @@ export const getWorktreeIndex = async (
   return ok(result.value.length);
 };
 
-const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => {
+export const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => {
   const entries = output.split("\n\n").filter(Boolean);
   let isFirst = true;
 
@@ -140,7 +140,7 @@ const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => {
   });
 };
 
-const parseWorktreeEntry = (entry: string, isMain: boolean): WorktreeInfo => {
+export const parseWorktreeEntry = (entry: string, isMain: boolean): WorktreeInfo => {
   const lines = entry.split("\n");
   const data: Record<string, string | boolean> = {};
 
@@ -179,7 +179,7 @@ const parseWorktreeEntry = (entry: string, isMain: boolean): WorktreeInfo => {
   };
 };
 
-const parsePruneOutput = (output: string): string[] => {
+export const parsePruneOutput = (output: string): string[] => {
   return output
     .split("\n")
     .filter((line) => line.includes("Removing") || line.includes("Pruning"))

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { Command } from "commander";
+import { ErrorCode } from "../core/errors.js";
 import { isGitRepository } from "../core/git.js";
 import {
   buildClaudeCommand,
@@ -15,6 +16,7 @@ import {
 import { formatError, formatPath } from "../output/formatter.js";
 import { printJson, printJsonError } from "../output/json.js";
 import { intro, log, outro, selectWorktree } from "../prompts/interactive.js";
+import { readStdin } from "../utils/stdin.js";
 
 export const openCommand = new Command("open")
   .description("Open a worktree in a new terminal window")
@@ -23,7 +25,10 @@ export const openCommand = new Command("open")
     "Branch name, worktree path, directory name, or # from `wtr ls`",
   )
   .option("--claude", "Start Claude Code in the new terminal")
-  .option("--plan <text>", "Start Claude Code with a plan (implies --claude)")
+  .option(
+    "--plan <text>",
+    "Start Claude Code with a plan (implies --claude). Use '-' to read from stdin.",
+  )
   .option(
     "--plan-file <path>",
     "Start Claude Code with a plan from a file (implies --claude)",
@@ -33,7 +38,8 @@ export const openCommand = new Command("open")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -48,14 +54,21 @@ export const openCommand = new Command("open")
     let worktree: WorktreeInfo | undefined;
     if (!identifier) {
       if (json) {
-        printJsonError("Worktree identifier required in --json mode");
+        printJsonError(
+          "Worktree identifier required in --json mode",
+          ErrorCode.IDENTIFIER_REQUIRED,
+        );
         process.exit(1);
       }
       worktree = await selectWorktree(listResult.value);
     } else {
       worktree = findWorktree(listResult.value, identifier);
       if (!worktree) {
-        if (json) printJsonError(`Worktree not found: ${identifier}`);
+        if (json)
+          printJsonError(
+            `Worktree not found: ${identifier}`,
+            ErrorCode.WORKTREE_NOT_FOUND,
+          );
         console.error(formatError(`Worktree not found: ${identifier}`));
         process.exit(1);
       }
@@ -66,14 +79,22 @@ export const openCommand = new Command("open")
       branch: worktree.branch,
     });
 
+    const resolvePlanText = async (): Promise<string> => {
+      if (options.planFile) {
+        return readFileSync(options.planFile, "utf-8");
+      }
+      if (options.plan === "-") {
+        return readStdin();
+      }
+      return options.plan;
+    };
+
     if (json) {
       // In JSON mode, do NOT actually open terminal — output what would run
       let command: string | undefined;
 
       if (options.plan || options.planFile) {
-        const planText = options.planFile
-          ? readFileSync(options.planFile, "utf-8")
-          : options.plan;
+        const planText = await resolvePlanText();
         const planPath = writePlanToTempFile(planText);
         command = buildClaudeCommand(planPath);
       } else if (options.claude) {
@@ -94,9 +115,7 @@ export const openCommand = new Command("open")
     let command: string | undefined;
 
     if (options.plan || options.planFile) {
-      const planText = options.planFile
-        ? readFileSync(options.planFile, "utf-8")
-        : options.plan;
+      const planText = await resolvePlanText();
       const planPath = writePlanToTempFile(planText);
       command = buildClaudeCommand(planPath);
       log.info(`Plan written to ${formatPath(planPath)}`);

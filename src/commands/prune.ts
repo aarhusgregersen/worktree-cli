@@ -5,6 +5,7 @@ import {
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
+import { ErrorCode } from "../core/errors.js";
 import { isGitRepository } from "../core/git.js";
 import {
   listWorktrees,
@@ -22,7 +23,9 @@ import {
 } from "../prompts/interactive.js";
 
 export const pruneCommand = new Command("prune")
-  .description("Clean up stale worktrees")
+  .description(
+    "Remove stale worktree entries for directories that no longer exist on disk",
+  )
   .option("--dry-run", "Show what would be pruned without doing it")
   .option(
     "--merged",
@@ -35,7 +38,8 @@ export const pruneCommand = new Command("prune")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }

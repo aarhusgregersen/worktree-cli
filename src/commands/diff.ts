@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { getDefaultBranch } from "../core/branch.js";
+import { ErrorCode } from "../core/errors.js";
 import { executeGitCommand, isGitRepository } from "../core/git.js";
 import {
   type WorktreeInfo,
@@ -27,7 +28,8 @@ export const diffCommand = new Command("diff")
     const json = options.json ?? false;
 
     if (!isGitRepository()) {
-      if (json) printJsonError("Not a git repository");
+      if (json)
+        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
       console.error(formatError("Not a git repository"));
       process.exit(1);
     }
@@ -42,14 +44,21 @@ export const diffCommand = new Command("diff")
     let worktree: WorktreeInfo | undefined;
     if (!identifier) {
       if (json) {
-        printJsonError("Worktree identifier required in --json mode");
+        printJsonError(
+          "Worktree identifier required in --json mode",
+          ErrorCode.IDENTIFIER_REQUIRED,
+        );
         process.exit(1);
       }
       worktree = await selectWorktree(listResult.value);
     } else {
       worktree = findWorktree(listResult.value, identifier);
       if (!worktree) {
-        if (json) printJsonError(`Worktree not found: ${identifier}`);
+        if (json)
+          printJsonError(
+            `Worktree not found: ${identifier}`,
+            ErrorCode.WORKTREE_NOT_FOUND,
+          );
         console.error(formatError(`Worktree not found: ${identifier}`));
         process.exit(1);
       }

@@ -11,6 +11,7 @@ import {
 export const renderWorktreeTable = (
   worktrees: readonly WorktreeInfo[],
   includeMain: boolean,
+  ages?: Map<string, string>,
 ): string => {
   const filtered = includeMain
     ? worktrees
@@ -20,14 +21,20 @@ export const renderWorktreeTable = (
     return "No worktrees found.";
   }
 
+  const head = [
+    pc.bold("#"),
+    pc.bold("Path"),
+    pc.bold("Branch"),
+    pc.bold("HEAD"),
+    pc.bold("Status"),
+  ];
+
+  if (ages) {
+    head.push(pc.bold("Activity"));
+  }
+
   const table = new Table({
-    head: [
-      pc.bold("#"),
-      pc.bold("Path"),
-      pc.bold("Branch"),
-      pc.bold("HEAD"),
-      pc.bold("Status"),
-    ],
+    head,
     style: {
       head: [],
       border: ["dim"],
@@ -35,13 +42,19 @@ export const renderWorktreeTable = (
   });
 
   for (const [i, wt] of filtered.entries()) {
-    table.push([
+    const row: string[] = [
       pc.dim(String(i + 1)),
       formatPath(wt.path),
       wt.branch ? formatBranch(wt.branch) : pc.dim("detached"),
       formatHead(wt.head),
       formatStatus(wt),
-    ]);
+    ];
+
+    if (ages) {
+      row.push(ages.get(wt.path) || pc.dim("--"));
+    }
+
+    table.push(row);
   }
 
   return table.toString();
