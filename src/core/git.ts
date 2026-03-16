@@ -1,8 +1,8 @@
-import { exec, execSync } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
 import { promisify } from "node:util";
 import { type Result, err, ok } from "../utils/result.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 interface GitCommandOptions {
   readonly cwd?: string;
@@ -18,14 +18,12 @@ export const executeGitCommand = async (
   args: readonly string[],
   options?: GitCommandOptions,
 ): Promise<Result<GitExecResult, Error>> => {
-  const command = `git ${args.join(" ")}`;
-
   if (options?.verbose) {
-    console.log(`$ ${command}`);
+    console.log(`$ git ${args.join(" ")}`);
   }
 
   try {
-    const result = await execAsync(command, {
+    const result = await execFileAsync("git", [...args], {
       cwd: options?.cwd,
       maxBuffer: 10 * 1024 * 1024,
     });

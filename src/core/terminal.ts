@@ -44,9 +44,13 @@ export const buildWorktreeEnv = (opts: {
   WT_PATH: opts.path,
 });
 
+const escapeShell = (s: string): string => {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+};
+
 export const buildClaudeCommand = (planPath?: string): string => {
   if (planPath) {
-    return `claude "$(cat ${planPath})"`;
+    return `cat ${escapeShell(planPath)} | claude --resume no -p -`;
   }
   return "claude";
 };
@@ -84,10 +88,6 @@ export const openTerminalWindow = (opts: {
       openGeneric(terminal, opts.cwd, opts.command);
       break;
   }
-};
-
-const escapeShell = (s: string): string => {
-  return `'${s.replace(/'/g, "'\\''")}'`;
 };
 
 const escapeAppleScript = (s: string): string => {

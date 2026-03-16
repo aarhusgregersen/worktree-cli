@@ -5,7 +5,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { isExcludedPort } from "../config/schema.js";
 import { type Result, err, ok } from "../utils/result.js";
 
@@ -31,8 +31,26 @@ export const copyFiles = (
   const copied: string[] = [];
 
   for (const pattern of patterns) {
-    const sourcePath = join(sourceRoot, pattern);
-    const targetPath = join(targetRoot, pattern);
+    const sourcePath = resolve(sourceRoot, pattern);
+    const targetPath = resolve(targetRoot, pattern);
+
+    const relToSource = relative(sourceRoot, sourcePath);
+    if (relToSource.startsWith("..") || isAbsolute(relToSource)) {
+      return err(
+        new Error(
+          `Refusing to copy "${pattern}": path escapes source root`,
+        ),
+      );
+    }
+
+    const relToTarget = relative(targetRoot, targetPath);
+    if (relToTarget.startsWith("..") || isAbsolute(relToTarget)) {
+      return err(
+        new Error(
+          `Refusing to copy "${pattern}": path escapes target root`,
+        ),
+      );
+    }
 
     if (!existsSync(sourcePath)) {
       continue;

@@ -1,9 +1,9 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { type Result, ok } from "../utils/result.js";
 import { executeGitCommand } from "./git.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface DiffStat {
   readonly filesChanged: number;
@@ -76,31 +76,48 @@ export const isBranchPushed = async (
   return result.ok;
 };
 
-export const isClaudeActive = async (
-  worktreePath: string,
-): Promise<boolean> => {
+/**
+ * Get the working directories of all running Claude processes.
+ * Call once and reuse the result to check multiple worktrees.
+ */
+export const getClaudeCwds = async (): Promise<readonly string[]> => {
   try {
-    const { stdout: pgrepOut } = await execAsync("pgrep -x claude");
+    const { stdout: pgrepOut } = await execFileAsync("pgrep", ["-x", "claude"]);
     const pids = pgrepOut.trim().split("\n").filter(Boolean);
+    if (pids.length === 0) return [];
 
-    for (const pid of pids) {
-      try {
-        const { stdout: lsofOut } = await execAsync(`lsof -p ${pid} -Fn`);
-        const cwdLine = lsofOut
-          .split("\n")
-          .find((l) => l.startsWith("n") && l.includes("cwd"));
-
-        if (cwdLine) {
-          const cwd = cwdLine.substring(1);
-          if (cwd.startsWith(worktreePath)) return true;
+    const cwds = await Promise.all(
+      pids.map(async (pid) => {
+        try {
+          const { stdout: lsofOut } = await execFileAsync("lsof", [
+            "-a",
+            "-d",
+            "cwd",
+            "-p",
+            pid,
+            "-Fn",
+          ]);
+          const cwdLine = lsofOut
+            .split("\n")
+            .find((l) => l.startsWith("n/"));
+          return cwdLine ? cwdLine.substring(1) : null;
+        } catch {
+          return null;
         }
-      } catch {
-        // lsof may fail for some processes, skip
-      }
-    }
+      }),
+    );
 
-    return false;
+    return cwds.filter((c): c is string => c !== null);
   } catch {
-    return false;
+    return [];
   }
+};
+
+export const isClaudeActive = (
+  claudeCwds: readonly string[],
+  worktreePath: string,
+): boolean => {
+  return claudeCwds.some(
+    (cwd) => cwd === worktreePath || cwd.startsWith(`${worktreePath}/`),
+  );
 };

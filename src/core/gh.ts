@@ -1,9 +1,9 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { type Result, err, ok } from "../utils/result.js";
 import { executeGitCommand } from "./git.js";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface PrInfo {
   readonly number: number;
@@ -22,7 +22,7 @@ export interface CreatePrOptions {
 
 export const isGhAvailable = async (): Promise<boolean> => {
   try {
-    await execAsync("gh --version");
+    await execFileAsync("gh", ["--version"]);
     return true;
   } catch {
     return false;
@@ -34,8 +34,9 @@ export const getPrForBranch = async (
   cwd?: string,
 ): Promise<PrInfo | null> => {
   try {
-    const { stdout } = await execAsync(
-      `gh pr view ${branch} --json number,title,url,state,isDraft`,
+    const { stdout } = await execFileAsync(
+      "gh",
+      ["pr", "view", branch, "--json", "number,title,url,state,isDraft"],
       { cwd },
     );
     return JSON.parse(stdout.trim()) as PrInfo;
@@ -47,12 +48,12 @@ export const getPrForBranch = async (
 export const createPr = async (
   options: CreatePrOptions,
 ): Promise<Result<PrInfo, Error>> => {
-  const args = ["gh", "pr", "create", "--title", JSON.stringify(options.title)];
+  const args = ["pr", "create", "--title", options.title];
 
   if (options.body) {
-    args.push("--body", JSON.stringify(options.body));
+    args.push("--body", options.body);
   } else {
-    args.push("--body", '""');
+    args.push("--body", "");
   }
 
   if (options.draft) {
@@ -60,7 +61,7 @@ export const createPr = async (
   }
 
   try {
-    const { stdout } = await execAsync(args.join(" "), { cwd: options.cwd });
+    const { stdout } = await execFileAsync("gh", args, { cwd: options.cwd });
     const url = stdout.trim();
 
     // Fetch the created PR info

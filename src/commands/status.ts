@@ -10,6 +10,7 @@ import { ErrorCode } from "../core/errors.js";
 import { getPrForBranch } from "../core/gh.js";
 import { isGitRepository } from "../core/git.js";
 import {
+  getClaudeCwds,
   getDiffStat,
   hasUncommittedChanges,
   isBranchPushed,
@@ -42,7 +43,10 @@ export const statusCommand = new Command("status")
       process.exit(1);
     }
 
-    const defaultBranch = await getDefaultBranch();
+    const [defaultBranch, claudeCwds] = await Promise.all([
+      getDefaultBranch(),
+      getClaudeCwds(),
+    ]);
     const worktrees = options.all
       ? listResult.value
       : listResult.value.filter((wt) => !wt.isMain);
@@ -77,7 +81,6 @@ export const statusCommand = new Command("status")
           diffResult,
           uncommittedResult,
           pushed,
-          claude,
           pr,
           lastCommit,
         ] = await Promise.all([
@@ -85,12 +88,13 @@ export const statusCommand = new Command("status")
           getDiffStat(wt.branch, defaultBranch),
           hasUncommittedChanges(wt.path),
           isBranchPushed(wt.branch),
-          isClaudeActive(wt.path),
           options.pr !== false
             ? getPrForBranch(wt.branch)
             : Promise.resolve(null),
           getLastCommitDate("%cr", wt.path),
         ]);
+
+        const claude = isClaudeActive(claudeCwds, wt.path);
 
         const diff = diffResult.ok
           ? diffResult.value

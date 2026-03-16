@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import { ErrorCode } from "../core/errors.js";
 import { isGitRepository } from "../core/git.js";
+import { resolvePlanText } from "../core/plan.js";
 import {
   buildClaudeCommand,
   buildWorktreeEnv,
@@ -16,7 +16,6 @@ import {
 import { formatError, formatPath } from "../output/formatter.js";
 import { printJson, printJsonError } from "../output/json.js";
 import { intro, log, outro, selectWorktree } from "../prompts/interactive.js";
-import { readStdin } from "../utils/stdin.js";
 
 export const openCommand = new Command("open")
   .description("Open a worktree in a new terminal window")
@@ -79,22 +78,12 @@ export const openCommand = new Command("open")
       branch: worktree.branch,
     });
 
-    const resolvePlanText = async (): Promise<string> => {
-      if (options.planFile) {
-        return readFileSync(options.planFile, "utf-8");
-      }
-      if (options.plan === "-") {
-        return readStdin();
-      }
-      return options.plan;
-    };
-
     if (json) {
       // In JSON mode, do NOT actually open terminal — output what would run
       let command: string | undefined;
 
       if (options.plan || options.planFile) {
-        const planText = await resolvePlanText();
+        const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
         command = buildClaudeCommand(planPath);
       } else if (options.claude) {
@@ -116,7 +105,7 @@ export const openCommand = new Command("open")
     let command: string | undefined;
 
     if (options.plan || options.planFile) {
-      const planText = await resolvePlanText();
+      const planText = await resolvePlanText(options);
       const planPath = writePlanToTempFile(planText);
       command = buildClaudeCommand(planPath);
       log.info(`Plan written to ${formatPath(planPath)}`);

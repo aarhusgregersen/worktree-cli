@@ -121,14 +121,6 @@ export const isInsideWorktree = (
     (wt) => !wt.isMain && (cwd === wt.path || cwd.startsWith(`${wt.path}/`)),
   );
 
-export const getWorktreeIndex = async (
-  cwd?: string,
-): Promise<Result<number, Error>> => {
-  const result = await listWorktrees(cwd);
-  if (!result.ok) return result;
-  return ok(result.value.length);
-};
-
 export const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => {
   const entries = output.split("\n\n").filter(Boolean);
   let isFirst = true;

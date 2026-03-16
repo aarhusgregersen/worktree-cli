@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
@@ -15,6 +14,7 @@ import {
   getMainWorktreePath,
   isGitRepository,
 } from "../core/git.js";
+import { resolvePlanText } from "../core/plan.js";
 import {
   buildClaudeCommand,
   buildWorktreeEnv,
@@ -23,7 +23,6 @@ import {
 } from "../core/terminal.js";
 import {
   addWorktree,
-  getWorktreeIndex,
   isInsideWorktree,
   listWorktrees,
 } from "../core/worktree.js";
@@ -35,7 +34,6 @@ import {
 } from "../output/formatter.js";
 import { printJson, printJsonError } from "../output/json.js";
 import { intro, log, outro, spinner } from "../prompts/interactive.js";
-import { readStdin } from "../utils/stdin.js";
 
 export const addCommand = new Command("add")
   .description("Create a new worktree")
@@ -176,14 +174,14 @@ export const addCommand = new Command("add")
         }
 
         if (options.bump !== false && config.portOffset > 0) {
-          const indexResult = await getWorktreeIndex();
-          if (!indexResult.ok) {
+          const freshList = await listWorktrees();
+          if (!freshList.ok) {
             if (!json)
               log.warning(
                 "Could not determine worktree index for port bumping",
               );
           } else {
-            const worktreeIndex = indexResult.value - 1;
+            const worktreeIndex = freshList.value.length - 1;
             if (worktreeIndex > 0) {
               const offset = config.portOffset * worktreeIndex;
               jsonResult.portOffset = offset;
@@ -228,14 +226,7 @@ export const addCommand = new Command("add")
       const env = buildWorktreeEnv({ path: worktreePath, branch });
 
       if (options.plan || options.planFile) {
-        let planText: string;
-        if (options.planFile) {
-          planText = readFileSync(options.planFile, "utf-8");
-        } else if (options.plan === "-") {
-          planText = await readStdin();
-        } else {
-          planText = options.plan;
-        }
+        const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand(planPath);
         log.info(`Plan written to ${formatPath(planPath)}`);
@@ -265,14 +256,7 @@ export const addCommand = new Command("add")
       );
     } else {
       if (options.plan || options.planFile) {
-        let planText: string;
-        if (options.planFile) {
-          planText = readFileSync(options.planFile, "utf-8");
-        } else if (options.plan === "-") {
-          planText = await readStdin();
-        } else {
-          planText = options.plan;
-        }
+        const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand(planPath);
         jsonResult.command = command;
