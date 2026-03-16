@@ -242,10 +242,22 @@ export const addCommand = new Command("add")
 
         openTerminalWindow({ cwd: worktreePath, command, env });
         log.info("Opened terminal with Claude Code");
+        log.info(
+          "HANDOFF: A new Claude Code session has been launched in the worktree.",
+        );
+        log.info(
+          "Do NOT continue working on the delegated task in this session.",
+        );
       } else if (options.open) {
         const command = buildClaudeCommand();
         openTerminalWindow({ cwd: worktreePath, command, env });
         log.info("Opened terminal with Claude Code");
+        log.info(
+          "HANDOFF: A new Claude Code session has been launched in the worktree.",
+        );
+        log.info(
+          "Do NOT continue working on the delegated task in this session.",
+        );
       }
 
       outro(

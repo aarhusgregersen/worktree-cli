@@ -106,6 +106,7 @@ export const openCommand = new Command("open")
         branch: worktree.branch,
         command: command ?? null,
         env,
+        ...(command ? { handoff: true } : {}),
       });
       return;
     }
@@ -125,5 +126,15 @@ export const openCommand = new Command("open")
 
     openTerminalWindow({ cwd: worktree.path, command, env });
 
-    outro(`Opened terminal at ${formatPath(worktree.path)}`);
+    if (command) {
+      log.info(
+        "HANDOFF: A new Claude Code session has been launched in the worktree.",
+      );
+      log.info(
+        "Do NOT continue working on the delegated task in this session.",
+      );
+      outro(`Opened Claude Code in worktree at ${formatPath(worktree.path)}`);
+    } else {
+      outro(`Opened terminal at ${formatPath(worktree.path)}`);
+    }
   });

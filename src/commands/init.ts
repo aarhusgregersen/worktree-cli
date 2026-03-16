@@ -1,3 +1,11 @@
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { addToGitignore, configExists, saveConfig } from "../config/loader.js";
@@ -5,7 +13,7 @@ import { CONFIG_FILENAME, type WtConfig } from "../config/schema.js";
 import { ErrorCode } from "../core/errors.js";
 import { getGitRoot, isGitRepository } from "../core/git.js";
 import { getSuggestions } from "../core/gitignore.js";
-import { formatError } from "../output/formatter.js";
+import { formatDim, formatError } from "../output/formatter.js";
 import { printJson, printJsonError } from "../output/json.js";
 import {
   confirm,
@@ -16,6 +24,60 @@ import {
   outro,
   selectMultiple,
 } from "../prompts/interactive.js";
+
+const CLAUDE_MD_SNIPPET = `## wtr (worktree-cli)
+Use \`wtr\` to manage git worktrees for parallel development. Prefer this over
+raw \`git worktree\` commands. Key commands:
+- \`wtr add <branch> --plan "..."\` — create worktree and delegate task to Claude (preferred)
+- \`wtr add <branch> --open\` — create worktree and open terminal with interactive Claude
+- \`wtr add <branch>\` — create worktree only, no terminal (rarely needed)
+- \`wtr list\` — list worktrees
+- \`wtr status\` — enriched status with branch/commit/PR info
+- \`wtr remove <id>\` — remove a worktree
+- \`wtr pr <id>\` — create a GitHub PR for a worktree
+All commands support \`--json\` for structured output.
+
+When creating a worktree, almost always use \`--plan\` (if you have instructions to
+delegate) or \`--open\` (if interactive exploration is needed). Using bare \`wtr add\`
+without either flag is rare — only do it when the user explicitly doesn't want a
+terminal opened. After \`--plan\` or \`--open\`, hand off and do NOT continue the
+delegated task in the current session.`;
+
+const CLAUDE_MD_MARKER = "## wtr (worktree-cli)";
+
+function claudeMdContainsWtr(content: string): boolean {
+  return content.includes(CLAUDE_MD_MARKER);
+}
+
+function addWtrToClaudeMd(): { added: boolean; path: string; error?: string } {
+  const claudeDir = join(homedir(), ".claude");
+  const claudeMdPath = join(claudeDir, "CLAUDE.md");
+
+  try {
+    if (!existsSync(claudeDir)) {
+      mkdirSync(claudeDir, { recursive: true });
+    }
+
+    if (existsSync(claudeMdPath)) {
+      const content = readFileSync(claudeMdPath, "utf-8");
+      if (claudeMdContainsWtr(content)) {
+        return { added: false, path: claudeMdPath };
+      }
+      const separator = content.endsWith("\n") ? "\n" : "\n\n";
+      appendFileSync(claudeMdPath, `${separator}${CLAUDE_MD_SNIPPET}\n`);
+    } else {
+      appendFileSync(claudeMdPath, `${CLAUDE_MD_SNIPPET}\n`);
+    }
+
+    return { added: true, path: claudeMdPath };
+  } catch (e) {
+    return {
+      added: false,
+      path: claudeMdPath,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
 
 export const initCommand = new Command("init")
   .description("Initialize wtr for this repository")
@@ -137,11 +199,46 @@ export const initCommand = new Command("init")
       }
     }
 
+    let claudeMdUpdated = false;
+
+    const claudeMdPath = join(homedir(), ".claude", "CLAUDE.md");
+    const claudeMdExists = existsSync(claudeMdPath);
+    const alreadyHasWtr =
+      claudeMdExists &&
+      claudeMdContainsWtr(readFileSync(claudeMdPath, "utf-8"));
+
+    if (!alreadyHasWtr) {
+      const shouldAddClaudeMd =
+        useDefaults ||
+        (await confirm(
+          "Add wtr instructions to ~/.claude/CLAUDE.md for Claude Code? (recommended)",
+          true,
+        ));
+
+      if (shouldAddClaudeMd) {
+        const result = addWtrToClaudeMd();
+        if (result.added) {
+          if (!json) log.success("Added wtr instructions to ~/.claude/CLAUDE.md");
+          claudeMdUpdated = true;
+        } else if (result.error) {
+          if (!json)
+            log.warning(
+              `Could not update ~/.claude/CLAUDE.md: ${result.error}`,
+            );
+        }
+      }
+    } else if (!json) {
+      log.info(
+        formatDim("wtr instructions already present in ~/.claude/CLAUDE.md"),
+      );
+    }
+
     if (json) {
       printJson({
         configPath: `${repoRoot}/${CONFIG_FILENAME}`,
         config,
         gitignoreUpdated,
+        claudeMdUpdated,
       });
     } else {
       const summary = [

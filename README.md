@@ -281,6 +281,32 @@ All commands support `--json` for structured output. Errors include machine-read
 - **`--plan`** flags pipe instructions directly to Claude Code
 - **`wtr each`** runs commands across all worktrees
 
+### Setup
+
+Running `wtr init` will offer to add wtr instructions to `~/.claude/CLAUDE.md` so that Claude Code always knows how to use `wtr` correctly — including preferring `--plan` or `--open` when creating worktrees. This is recommended for all users.
+
+If you skipped this during init, you can add the following to `~/.claude/CLAUDE.md` manually:
+
+```markdown
+## wtr (worktree-cli)
+Use `wtr` to manage git worktrees for parallel development. Prefer this over
+raw `git worktree` commands. Key commands:
+- `wtr add <branch> --plan "..."` — create worktree and delegate task to Claude (preferred)
+- `wtr add <branch> --open` — create worktree and open terminal with interactive Claude
+- `wtr add <branch>` — create worktree only, no terminal (rarely needed)
+- `wtr list` — list worktrees
+- `wtr status` — enriched status with branch/commit/PR info
+- `wtr remove <id>` — remove a worktree
+- `wtr pr <id>` — create a GitHub PR for a worktree
+All commands support `--json` for structured output.
+
+When creating a worktree, almost always use `--plan` (if you have instructions to
+delegate) or `--open` (if interactive exploration is needed). Using bare `wtr add`
+without either flag is rare — only do it when the user explicitly doesn't want a
+terminal opened. After `--plan` or `--open`, hand off and do NOT continue the
+delegated task in the current session.
+```
+
 ### Example: Claude Code Workflow
 
 ```bash

@@ -17,6 +17,7 @@ argument-hint: [subcommand or question]
 2. **Never use raw `git worktree`** — always use `wtr` which wraps it with env setup and structured output.
 3. **`wtr add` must run from the main worktree** — it will refuse to run from inside a non-main worktree.
 4. **Always use `--open` or `--plan` when creating worktrees from an existing session** — when the user asks you to spin up a worktree for a task, always include `--open` (for interactive Claude) or `--plan` (to delegate with instructions). This opens a new terminal automatically so the user can seamlessly continue in the new worktree without manual steps. Omit these flags only when the user explicitly says they don't want a terminal opened.
+5. **Handoff after opening Claude in a worktree** — After running `wtr add --open`, `wtr add --plan`, `wtr open --claude`, or `wtr open --plan`, the task has been delegated to the new terminal. Do NOT continue implementing the delegated task. Inform the user that work has been handed off (include branch name and path) and ask if there's anything else to work on.
 
 ## Am I in a Worktree?
 
@@ -129,6 +130,8 @@ wtr add feature/auth --plan-file /path/to/plan.md
 This creates the worktree, opens a new terminal, and starts Claude with the given plan so implementation begins immediately. Use this to parallelize independent work across multiple worktrees.
 
 Both commands open terminals via osascript inside `wtr`'s own process — no nested Claude session is created. **Omit `--json`** so the terminal opens directly.
+
+> **After handoff:** Once these commands complete, this session should NOT continue implementing the task. The new terminal has its own Claude session. Report the handoff to the user and wait for further instructions.
 
 You can also launch Claude in an existing worktree:
 
