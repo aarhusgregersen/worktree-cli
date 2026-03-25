@@ -6,7 +6,7 @@ import {
   globalConfigExists,
   loadConfig,
 } from "../config/loader.js";
-import { branchExists } from "../core/branch.js";
+import { branchExists, fetchOrigin, getDefaultBranch } from "../core/branch.js";
 import { bumpPortsInEnvFiles, copyFiles } from "../core/env.js";
 import { ErrorCode } from "../core/errors.js";
 import {
@@ -41,7 +41,7 @@ export const addCommand = new Command("add")
   .argument("[path]", "Worktree path (optional)")
   .option("-b, --create", "Create new branch if it does not exist")
   .option("-B, --force-create", "Create or reset branch")
-  .option("--base <ref>", "Base ref for new branch (default: HEAD)")
+  .option("--base <ref>", "Base ref for new branch (default: origin/<default-branch>)")
   .option("--detach", "Create in detached HEAD state")
   .option("--no-copy", "Skip copying files from main worktree")
   .option("--no-bump", "Skip port bumping")
@@ -104,6 +104,23 @@ export const addCommand = new Command("add")
     if (!json) intro("wtr add");
 
     const s = json ? null : spinner();
+
+    // When creating a new branch, fetch origin and default base to origin/<default-branch>
+    // so the worktree always starts from a clean, up-to-date main branch
+    let baseRef: string | undefined = options.base;
+    if (!baseRef && shouldCreateBranch) {
+      s?.start("Fetching origin");
+      const fetchResult = await fetchOrigin();
+      if (!fetchResult.ok) {
+        s?.stop(pc.yellow("Fetch failed (continuing with local state)"));
+      } else {
+        s?.stop(pc.green("Fetched origin"));
+      }
+
+      const defaultBranch = await getDefaultBranch();
+      baseRef = `origin/${defaultBranch}`;
+    }
+
     s?.start(`Creating worktree at ${formatPath(worktreePath)}`);
 
     const result = await addWorktree({
@@ -111,7 +128,7 @@ export const addCommand = new Command("add")
       branch,
       createBranch: (options.create ?? false) || shouldCreateBranch,
       forceCreate: options.forceCreate ?? false,
-      baseRef: options.base,
+      baseRef,
       detach: options.detach ?? false,
     });
 
