@@ -50,7 +50,7 @@ const escapeShell = (s: string): string => {
 
 export const buildClaudeCommand = (planPath?: string): string => {
   if (planPath) {
-    return `cat ${escapeShell(planPath)} | claude --resume no -p -`;
+    return `claude "$(cat ${escapeShell(planPath)})"`;
   }
   return "claude";
 };

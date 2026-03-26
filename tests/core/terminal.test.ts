@@ -41,8 +41,8 @@ describe("buildClaudeCommand", () => {
     expect(buildClaudeCommand()).toBe("claude");
   });
 
-  it("returns command with plan file piped to claude", () => {
+  it("returns interactive command with plan as initial prompt", () => {
     const cmd = buildClaudeCommand("/tmp/plan.md");
-    expect(cmd).toBe("cat '/tmp/plan.md' | claude --resume no -p -");
+    expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);;
   });
 });

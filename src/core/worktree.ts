@@ -43,13 +43,13 @@ export const addWorktree = async (options: {
     args.push("-B", options.branch);
     args.push(options.path);
     if (options.baseRef) {
-      args.push(options.baseRef);
+      args.push("--no-track", options.baseRef);
     }
   } else if (options.createBranch) {
     args.push("-b", options.branch);
     args.push(options.path);
     if (options.baseRef) {
-      args.push(options.baseRef);
+      args.push("--no-track", options.baseRef);
     }
   } else {
     args.push(options.path);
