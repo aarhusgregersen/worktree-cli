@@ -1,6 +1,7 @@
 import { Command } from "commander";
+import { loadConfig } from "../config/loader.js";
 import { ErrorCode } from "../core/errors.js";
-import { isGitRepository } from "../core/git.js";
+import { getGitRoot, isGitRepository } from "../core/git.js";
 import { resolvePlanText } from "../core/plan.js";
 import {
   buildClaudeCommand,
@@ -102,6 +103,12 @@ export const openCommand = new Command("open")
 
     intro("wtr open");
 
+    const rootResult = await getGitRoot();
+    const configResult = rootResult.ok ? loadConfig(rootResult.value) : undefined;
+    const terminalMode = configResult?.ok
+      ? configResult.value.terminal.mode
+      : "window";
+
     let command: string | undefined;
 
     if (options.plan || options.planFile) {
@@ -113,7 +120,7 @@ export const openCommand = new Command("open")
       command = buildClaudeCommand();
     }
 
-    openTerminalWindow({ cwd: worktree.path, command, env });
+    openTerminalWindow({ cwd: worktree.path, command, env, mode: terminalMode });
 
     if (command) {
       log.info(

@@ -241,6 +241,10 @@ export const addCommand = new Command("add")
 
     if (!json) {
       const env = buildWorktreeEnv({ path: worktreePath, branch });
+      const configResult2 = loadConfig(repoRoot);
+      const terminalMode = configResult2.ok
+        ? configResult2.value.terminal.mode
+        : "window";
 
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
@@ -248,7 +252,7 @@ export const addCommand = new Command("add")
         const command = buildClaudeCommand(planPath);
         log.info(`Plan written to ${formatPath(planPath)}`);
 
-        openTerminalWindow({ cwd: worktreePath, command, env });
+        openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
         log.info("Opened terminal with Claude Code");
         log.info(
           "HANDOFF: A new Claude Code session has been launched in the worktree.",
@@ -258,7 +262,7 @@ export const addCommand = new Command("add")
         );
       } else if (options.open) {
         const command = buildClaudeCommand();
-        openTerminalWindow({ cwd: worktreePath, command, env });
+        openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
         log.info("Opened terminal with Claude Code");
         log.info(
           "HANDOFF: A new Claude Code session has been launched in the worktree.",

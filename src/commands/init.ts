@@ -9,7 +9,11 @@ import { join } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import { addToGitignore, configExists, saveConfig } from "../config/loader.js";
-import { CONFIG_FILENAME, type WtConfig } from "../config/schema.js";
+import {
+  CONFIG_FILENAME,
+  DEFAULT_TERMINAL_CONFIG,
+  type WtConfig,
+} from "../config/schema.js";
 import { ErrorCode } from "../core/errors.js";
 import { getGitRoot, isGitRepository } from "../core/git.js";
 import { getSuggestions } from "../core/gitignore.js";
@@ -167,6 +171,7 @@ export const initCommand = new Command("init")
       copyFiles,
       portOffset,
       portExclusions: [],
+      terminal: DEFAULT_TERMINAL_CONFIG,
     };
 
     const saveResult = saveConfig(repoRoot, config);

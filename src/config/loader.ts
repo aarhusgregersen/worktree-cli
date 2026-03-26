@@ -9,6 +9,7 @@ import { type Result, err, ok } from "../utils/result.js";
 import {
   CONFIG_FILENAME,
   DEFAULT_CONFIG,
+  DEFAULT_TERMINAL_CONFIG,
   GLOBAL_CONFIG_PATH,
   type WtConfig,
 } from "./schema.js";
@@ -41,6 +42,11 @@ const mergeConfig = (
   copyFiles: override.copyFiles ?? base.copyFiles,
   portOffset: override.portOffset ?? base.portOffset,
   portExclusions: override.portExclusions ?? base.portExclusions,
+  terminal: {
+    ...DEFAULT_TERMINAL_CONFIG,
+    ...base.terminal,
+    ...(override.terminal ?? {}),
+  },
 });
 
 export const loadConfig = (repoRoot: string): Result<WtConfig, Error> => {
