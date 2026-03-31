@@ -78,12 +78,13 @@ The `pr` field is `null` when no PR exists or `--no-pr` is used.
     }
   ],
   "portOffset": 100,
+  "database": { "name": "myapp_dev_wtr_feature_auth", "template": "myapp_dev" },
   "command": "claude \"$(cat /tmp/wtr-plan-xxx.md)\"",
   "planPath": "/tmp/wtr-plan-xxx.md"
 }
 ```
 
-The `command` and `planPath` fields are only present when `--plan` or `--plan-file` is used. `portOffset` is the total offset applied.
+The `command` and `planPath` fields are only present when `--plan` or `--plan-file` is used. `portOffset` is the total offset applied. The `database` field is only present when `--db` is used.
 
 ## `wtr current --json`
 
@@ -162,9 +163,45 @@ The `command` and `planPath` fields are only present when `--plan` or `--plan-fi
   "path": "/path/to/worktree",
   "branch": "feature/auth",
   "removed": true,
-  "branchDeleted": false
+  "branchDeleted": false,
+  "databaseDropped": true,
+  "database": "myapp_dev_wtr_feature_auth"
 }
 ```
+
+## `wtr db clone [name] --json`
+
+```json
+{
+  "database": "myapp_dev_wtr_feature_auth",
+  "template": "myapp_dev",
+  "path": "/path/to/worktree",
+  "updatedFiles": [".env"]
+}
+```
+
+## `wtr db drop --json`
+
+```json
+{
+  "database": "myapp_dev_wtr_feature_auth",
+  "dropped": true,
+  "path": "/path/to/worktree"
+}
+```
+
+## `wtr db status --json`
+
+```json
+{
+  "path": "/path/to/worktree",
+  "clonedDatabase": "myapp_dev_wtr_feature_auth",
+  "databaseUrl": "postgresql://user:pass@localhost:5432/myapp_dev_wtr_feature_auth",
+  "databaseKey": "DATABASE_URL"
+}
+```
+
+The `clonedDatabase` field is `null` if no database has been cloned for this worktree.
 
 ## `wtr open <id> --json`
 

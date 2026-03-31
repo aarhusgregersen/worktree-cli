@@ -7,6 +7,14 @@ import {
   loadConfig,
 } from "../config/loader.js";
 import { branchExists, fetchOrigin, getDefaultBranch } from "../core/branch.js";
+import {
+  createDatabase,
+  deriveDbName,
+  findDatabaseUrl,
+  parseDatabaseName,
+  updateDatabaseUrlInEnvFiles,
+  writeWorktreeDb,
+} from "../core/database.js";
 import { bumpPortsInEnvFiles, copyFiles } from "../core/env.js";
 import { ErrorCode } from "../core/errors.js";
 import {
@@ -45,6 +53,10 @@ export const addCommand = new Command("add")
   .option("--detach", "Create in detached HEAD state")
   .option("--no-copy", "Skip copying files from main worktree")
   .option("--no-bump", "Skip port bumping")
+  .option(
+    "--db [name]",
+    "Clone the PostgreSQL database for this worktree (name defaults to <template>_wtr_<branch>)",
+  )
   .option("--open", "Open a new terminal window with Claude Code")
   .option(
     "--plan <text>",
@@ -237,6 +249,47 @@ export const addCommand = new Command("add")
           `No ${pc.cyan(".wtr.json")} found. Run ${pc.cyan("wtr init")} to configure file copying and port bumping.`,
         ),
       );
+    }
+
+    // Database cloning (--db)
+    if (options.db !== undefined) {
+      const dbSource = findDatabaseUrl(worktreePath) ?? findDatabaseUrl(mainWorktreePath);
+
+      if (!dbSource) {
+        if (!json) log.warning("No DATABASE_URL found in .env files — skipping database clone");
+      } else {
+        const templateDb = parseDatabaseName(dbSource.url);
+        if (!templateDb) {
+          if (!json) log.warning(`Could not parse database name from ${dbSource.key} — skipping database clone`);
+        } else {
+          // Determine new database name: use explicit name or derive from branch
+          const newDbName =
+            typeof options.db === "string"
+              ? options.db
+              : deriveDbName(templateDb, branch);
+
+          s?.start(`Cloning database ${pc.cyan(templateDb)} → ${pc.cyan(newDbName)}`);
+          const dbResult = createDatabase(newDbName, templateDb);
+
+          if (!dbResult.ok) {
+            s?.stop(pc.red("Database clone failed"));
+            if (json) printJsonError(dbResult.error.message);
+            else log.warning(dbResult.error.message);
+          } else {
+            s?.stop(pc.green("Database cloned"));
+
+            // Update DATABASE_URL in the worktree's .env files
+            const updateResult = updateDatabaseUrlInEnvFiles(worktreePath, newDbName);
+            if (updateResult.ok && updateResult.value.length > 0) {
+              if (!json) log.info(`Updated DATABASE_URL in: ${updateResult.value.join(", ")}`);
+            }
+
+            // Track the database name for cleanup on removal
+            writeWorktreeDb(worktreePath, newDbName);
+            jsonResult.database = { name: newDbName, template: templateDb };
+          }
+        }
+      }
     }
 
     if (!json) {

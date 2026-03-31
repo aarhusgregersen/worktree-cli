@@ -6,6 +6,7 @@ import {
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
+import { dropDatabase, readWorktreeDb } from "../core/database.js";
 import { ErrorCode } from "../core/errors.js";
 import { isGitRepository } from "../core/git.js";
 import {
@@ -125,6 +126,23 @@ export const removeCommand = new Command("remove")
     }
 
     const s = json ? null : spinner();
+
+    // Check for an associated database before removing the worktree directory
+    const worktreeDbName = readWorktreeDb(worktree.path);
+    let databaseDropped = false;
+
+    if (worktreeDbName) {
+      s?.start(`Dropping database ${pc.cyan(worktreeDbName)}`);
+      const dbResult = dropDatabase(worktreeDbName);
+      if (dbResult.ok) {
+        s?.stop(pc.green(`Database ${worktreeDbName} dropped`));
+        databaseDropped = true;
+      } else {
+        s?.stop(pc.yellow("Could not drop database"));
+        if (!json) log.warning(dbResult.error.message);
+      }
+    }
+
     s?.start(`Removing worktree at ${formatPath(worktree.path)}`);
 
     const result = await removeWorktree({
@@ -145,7 +163,9 @@ export const removeCommand = new Command("remove")
 
     if (options.deleteBranch && worktree.branch) {
       s?.start(`Deleting branch ${formatBranch(worktree.branch)}`);
-      const branchResult = await deleteBranch(worktree.branch, false);
+      // Force-delete: user explicitly asked to delete the branch, and
+      // git branch -d refuses to delete squash-merged branches
+      const branchResult = await deleteBranch(worktree.branch, true);
 
       if (branchResult.ok) {
         s?.stop(pc.green("Branch deleted"));
@@ -200,6 +220,7 @@ export const removeCommand = new Command("remove")
         branch: worktree.branch,
         removed: true,
         branchDeleted,
+        ...(worktreeDbName ? { databaseDropped, database: worktreeDbName } : {}),
       });
     } else {
       outro(`Removed worktree at ${formatPath(worktree.path)}`);

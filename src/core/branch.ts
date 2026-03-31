@@ -31,12 +31,60 @@ export const isBranchMerged = async (
     cwd,
   });
 
-  if (!result.ok) return false;
+  if (result.ok) {
+    const merged = result.value.stdout
+      .split("\n")
+      .map((b) => b.trim().replace(/^\* /, ""))
+      .includes(branchName);
+    if (merged) return true;
+  }
 
-  return result.value.stdout
-    .split("\n")
-    .map((b) => b.trim().replace(/^\* /, ""))
-    .includes(branchName);
+  // Fall back to squash-merge detection: create a temporary commit that
+  // represents the branch squashed onto the merge-base, then use git-cherry
+  // to check whether that change already exists in the target. This handles
+  // GitHub "Squash and merge" where the original commits are not ancestors
+  // of the target branch.
+  return isSquashMerged(branchName, targetBranch, cwd);
+};
+
+const isSquashMerged = async (
+  branchName: string,
+  targetBranch: string,
+  cwd?: string,
+): Promise<boolean> => {
+  const mergeBase = await executeGitCommand(
+    ["merge-base", targetBranch, branchName],
+    { cwd },
+  );
+  if (!mergeBase.ok) return false;
+
+  const tree = await executeGitCommand(
+    ["rev-parse", `${branchName}^{tree}`],
+    { cwd },
+  );
+  if (!tree.ok) return false;
+
+  const tempCommit = await executeGitCommand(
+    [
+      "commit-tree",
+      tree.value.stdout.trim(),
+      "-p",
+      mergeBase.value.stdout.trim(),
+      "-m",
+      "temp",
+    ],
+    { cwd },
+  );
+  if (!tempCommit.ok) return false;
+
+  const cherry = await executeGitCommand(
+    ["cherry", targetBranch, tempCommit.value.stdout.trim()],
+    { cwd },
+  );
+  if (!cherry.ok) return false;
+
+  // A "-" prefix means the change is already present in the target branch
+  return cherry.value.stdout.trim().startsWith("-");
 };
 
 export const getDefaultBranch = async (cwd?: string): Promise<string> => {

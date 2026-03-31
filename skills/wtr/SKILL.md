@@ -40,7 +40,7 @@ You can also use `wtr current --json` to get full details about the current work
 
 | Command | Description | Key Flags |
 |---------|-------------|-----------|
-| `wtr add <branch>` | Create a new worktree | `--json`, `--open`, `--plan <text>`, `--plan -` |
+| `wtr add <branch>` | Create a new worktree | `--json`, `--open`, `--plan <text>`, `--plan -`, `--db [name]` |
 | `wtr list` | List all worktrees | `--json`, `-a`, `--porcelain` |
 | `wtr status` | Enriched status of all worktrees | `--json`, `--no-pr` |
 | `wtr current` | Show current worktree | `--json` |
@@ -51,6 +51,9 @@ You can also use `wtr current --json` to get full details about the current work
 | `wtr diff <id>` | Show diff for a worktree | `--stat`, `--uncommitted`, `--json` |
 | `wtr open <id>` | Open worktree in new terminal | `--claude`, `--plan <text>`, `--plan -`, `--json` |
 | `wtr pr <id>` | Create PR for a worktree | `--title`, `--body`, `--draft`, `--json` |
+| `wtr db clone [name]` | Clone the DB for the current worktree | `--json` |
+| `wtr db drop` | Drop the cloned DB for the current worktree | `--json`, `-y` |
+| `wtr db status` | Show DB info for the current worktree | `--json` |
 | `wtr remove <id>` | Remove a worktree | `--json`, `--delete-branch`, `-y` |
 | `wtr cleanup` | Remove worktrees with merged branches | `--dry-run`, `--json`, `--delete-branches` |
 | `wtr prune` | Remove stale worktree entries | `--merged`, `--json`, `-y` |
@@ -213,6 +216,38 @@ When `wtr init` is configured, each worktree gets ports bumped by `portOffset * 
 
 External service ports (DATABASE_URL, REDIS_URL, etc.) are never changed.
 
+## Database Isolation
+
+When worktrees involve database migrations or schema changes, use `--db` to clone the PostgreSQL database so each worktree has its own isolated copy:
+
+```bash
+# Auto-derive name from branch (e.g. myapp_dev_wtr_feature_auth)
+wtr add feature/auth --db --plan "Add auth tables"
+
+# Explicit database name
+wtr add feature/auth --db my_custom_db --open
+```
+
+This runs `createdb <new> -T <template>` using the database found in `DATABASE_URL` from the worktree's `.env` files, then updates `DATABASE_URL` to point at the clone. On `wtr remove`, the cloned database is automatically dropped.
+
+You can also add database isolation after the fact, from inside an existing worktree:
+
+```bash
+# Clone the DB for the current worktree (auto-derives name from branch)
+wtr db clone
+
+# Clone with an explicit name
+wtr db clone my_custom_db
+
+# Check what DB this worktree uses
+wtr db status
+
+# Drop the cloned DB (without removing the worktree)
+wtr db drop
+```
+
+**Note:** The template database must have no active connections when cloning. Close any running dev servers or database tools connected to it before cloning.
+
 ## Decision Guide
 
 | Situation | Command |
@@ -227,6 +262,9 @@ External service ports (DATABASE_URL, REDIS_URL, etc.) are never changed.
 | "Clean up merged branches" | `wtr cleanup --delete-branches --json` |
 | "Start a new parallel task (interactive)" | `wtr add feature/name --open` (no `--json`) |
 | "Delegate a task to another Claude" | `wtr add feature/name --plan "..."` (no `--json`) |
+| "Work on migrations in isolation" | `wtr add feature/name --db --plan "..."` (no `--json`) |
+| "Add DB isolation to current worktree" | `wtr db clone` |
+| "What database am I using?" | `wtr db status --json` |
 | "Open Claude in an existing worktree" | `wtr open 2 --claude` (no `--json`) |
 | "Run tests in worktree 1" | `wtr exec 1 npm test --json` |
 | "Run tests in all worktrees" | `wtr each npm test --bail` |

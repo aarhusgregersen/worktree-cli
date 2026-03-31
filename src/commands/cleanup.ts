@@ -3,6 +3,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import {
   deleteBranch,
+  fetchOrigin,
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
@@ -53,6 +54,10 @@ export const cleanupCommand = new Command("cleanup")
     if (!json) intro("wtr cleanup");
 
     const s = json ? null : spinner();
+    s?.start("Fetching latest from origin");
+    await fetchOrigin();
+    s?.stop("Fetched");
+
     s?.start("Checking worktrees");
 
     const listResult = await listWorktrees();
@@ -218,7 +223,9 @@ export const cleanupCommand = new Command("cleanup")
       let branchDeleted = false;
 
       if (options.deleteBranches) {
-        const branchResult = await deleteBranch(c.branch, false);
+        // Force-delete because git branch -d refuses to delete squash-merged
+        // branches (it doesn't recognize them as merged)
+        const branchResult = await deleteBranch(c.branch, true);
         if (branchResult.ok) {
           branchDeleted = true;
         }

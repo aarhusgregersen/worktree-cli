@@ -2,6 +2,7 @@ import { Command } from "commander";
 import pc from "picocolors";
 import {
   deleteBranch,
+  fetchOrigin,
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
@@ -96,6 +97,10 @@ export const pruneCommand = new Command("prune")
     }
 
     if (options.merged) {
+      s?.start("Fetching latest from origin");
+      await fetchOrigin();
+      s?.stop("Fetched");
+
       s?.start("Checking for merged branches");
 
       const defaultBranch = await getDefaultBranch();
@@ -163,7 +168,9 @@ export const pruneCommand = new Command("prune")
                 if (!json) log.success(`Removed ${formatPath(wt.path)}`);
 
                 if (options.deleteBranches && wt.branch) {
-                  const branchResult = await deleteBranch(wt.branch, false);
+                  // Force-delete because git branch -d refuses to delete
+                  // squash-merged branches (it doesn't recognize them as merged)
+                  const branchResult = await deleteBranch(wt.branch, true);
                   if (branchResult.ok) {
                     if (!json)
                       log.success(`Deleted branch ${formatBranch(wt.branch)}`);
