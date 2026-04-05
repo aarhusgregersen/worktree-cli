@@ -299,10 +299,14 @@ export const addCommand = new Command("add")
         ? configResult2.value.terminal.mode
         : "window";
 
+      const autoMode = configResult2.ok
+        ? configResult2.value.terminal.autoMode
+        : true;
+
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        const command = buildClaudeCommand(planPath);
+        const command = buildClaudeCommand({ planPath, autoMode });
         log.info(`Plan written to ${formatPath(planPath)}`);
 
         openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
@@ -314,7 +318,7 @@ export const addCommand = new Command("add")
           "Do NOT continue working on the delegated task in this session.",
         );
       } else if (options.open) {
-        const command = buildClaudeCommand();
+        const command = buildClaudeCommand({ autoMode });
         openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
         log.info("Opened terminal with Claude Code");
         log.info(
@@ -332,7 +336,7 @@ export const addCommand = new Command("add")
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        const command = buildClaudeCommand(planPath);
+        const command = buildClaudeCommand({ planPath });
         jsonResult.command = command;
         jsonResult.planPath = planPath;
       }

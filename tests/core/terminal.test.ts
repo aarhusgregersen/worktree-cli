@@ -37,12 +37,21 @@ describe("buildWorktreeEnv", () => {
 });
 
 describe("buildClaudeCommand", () => {
-  it("returns bare command without plan", () => {
-    expect(buildClaudeCommand()).toBe("claude");
+  it("returns auto mode command by default", () => {
+    expect(buildClaudeCommand()).toBe("claude --enable-auto-mode");
   });
 
-  it("returns interactive command with plan as initial prompt", () => {
-    const cmd = buildClaudeCommand("/tmp/plan.md");
-    expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);;
+  it("returns auto mode command with plan as initial prompt", () => {
+    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md" });
+    expect(cmd).toBe(`claude --enable-auto-mode "$(cat '/tmp/plan.md')"`);
+  });
+
+  it("returns bare command when autoMode is false", () => {
+    expect(buildClaudeCommand({ autoMode: false })).toBe("claude");
+  });
+
+  it("returns command with plan but no auto mode", () => {
+    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: false });
+    expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);
   });
 });

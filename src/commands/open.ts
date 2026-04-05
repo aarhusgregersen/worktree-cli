@@ -86,7 +86,7 @@ export const openCommand = new Command("open")
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        command = buildClaudeCommand(planPath);
+        command = buildClaudeCommand({ planPath });
       } else if (options.claude) {
         command = buildClaudeCommand();
       }
@@ -108,16 +108,19 @@ export const openCommand = new Command("open")
     const terminalMode = configResult?.ok
       ? configResult.value.terminal.mode
       : "window";
+    const autoMode = configResult?.ok
+      ? configResult.value.terminal.autoMode
+      : true;
 
     let command: string | undefined;
 
     if (options.plan || options.planFile) {
       const planText = await resolvePlanText(options);
       const planPath = writePlanToTempFile(planText);
-      command = buildClaudeCommand(planPath);
+      command = buildClaudeCommand({ planPath, autoMode });
       log.info(`Plan written to ${formatPath(planPath)}`);
     } else if (options.claude) {
-      command = buildClaudeCommand();
+      command = buildClaudeCommand({ autoMode });
     }
 
     openTerminalWindow({ cwd: worktree.path, command, env, mode: terminalMode });

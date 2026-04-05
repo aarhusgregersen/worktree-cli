@@ -65,11 +65,15 @@ const escapeShell = (s: string): string => {
   return `'${s.replace(/'/g, "'\\''")}'`;
 };
 
-export const buildClaudeCommand = (planPath?: string): string => {
-  if (planPath) {
-    return `claude --enable-auto-mode "$(cat ${escapeShell(planPath)})"`;
+export const buildClaudeCommand = (opts?: {
+  planPath?: string;
+  autoMode?: boolean;
+}): string => {
+  const flags = opts?.autoMode !== false ? " --enable-auto-mode" : "";
+  if (opts?.planPath) {
+    return `claude${flags} "$(cat ${escapeShell(opts.planPath)})"`;
   }
-  return "claude --enable-auto-mode";
+  return `claude${flags}`;
 };
 
 // Shell command that emits an OSC 7 escape sequence reporting the current
