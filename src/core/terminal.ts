@@ -67,9 +67,9 @@ const escapeShell = (s: string): string => {
 
 export const buildClaudeCommand = (planPath?: string): string => {
   if (planPath) {
-    return `claude "$(cat ${escapeShell(planPath)})"`;
+    return `claude --enable-auto-mode "$(cat ${escapeShell(planPath)})"`;
   }
-  return "claude";
+  return "claude --enable-auto-mode";
 };
 
 // Shell command that emits an OSC 7 escape sequence reporting the current
