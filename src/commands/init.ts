@@ -127,12 +127,14 @@ export const initCommand = new Command("init")
     const suggestions = getSuggestions(repoRoot);
     let copyFiles: string[] = [];
     let portOffset = 100;
+    let autoMode = false;
 
     if (useDefaults) {
       copyFiles = suggestions
         .filter((s) => s.recommended)
         .map((s) => s.pattern);
       portOffset = 100;
+      autoMode = false;
     } else {
       if (suggestions.length > 0) {
         log.info("Found files that might need to be copied to new worktrees:");
@@ -165,13 +167,18 @@ export const initCommand = new Command("init")
         "Port offset between worktrees (recommended: 100):",
         100,
       );
+
+      autoMode = await confirm(
+        "Enable Claude auto mode in worktree terminals? (uses more tokens)",
+        false,
+      );
     }
 
     const config: WtConfig = {
       copyFiles,
       portOffset,
       portExclusions: [],
-      terminal: DEFAULT_TERMINAL_CONFIG,
+      terminal: { ...DEFAULT_TERMINAL_CONFIG, autoMode },
     };
 
     const saveResult = saveConfig(repoRoot, config);

@@ -20,7 +20,7 @@ export interface WtConfig {
 
 export const DEFAULT_TERMINAL_CONFIG: TerminalConfig = {
   mode: "window",
-  autoMode: true,
+  autoMode: false,
 };
 
 export const DEFAULT_CONFIG: WtConfig = {

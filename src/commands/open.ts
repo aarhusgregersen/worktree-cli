@@ -110,7 +110,7 @@ export const openCommand = new Command("open")
       : "window";
     const autoMode = configResult?.ok
       ? configResult.value.terminal.autoMode
-      : true;
+      : false;
 
     let command: string | undefined;
 

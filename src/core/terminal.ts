@@ -69,7 +69,7 @@ export const buildClaudeCommand = (opts?: {
   planPath?: string;
   autoMode?: boolean;
 }): string => {
-  const flags = opts?.autoMode !== false ? " --enable-auto-mode" : "";
+  const flags = opts?.autoMode === true ? " --enable-auto-mode" : "";
   if (opts?.planPath) {
     return `claude${flags} "$(cat ${escapeShell(opts.planPath)})"`;
   }

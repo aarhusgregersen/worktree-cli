@@ -301,7 +301,7 @@ export const addCommand = new Command("add")
 
       const autoMode = configResult2.ok
         ? configResult2.value.terminal.autoMode
-        : true;
+        : false;
 
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);

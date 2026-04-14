@@ -37,12 +37,21 @@ describe("buildWorktreeEnv", () => {
 });
 
 describe("buildClaudeCommand", () => {
-  it("returns auto mode command by default", () => {
-    expect(buildClaudeCommand()).toBe("claude --enable-auto-mode");
+  it("returns bare command by default", () => {
+    expect(buildClaudeCommand()).toBe("claude");
   });
 
-  it("returns auto mode command with plan as initial prompt", () => {
+  it("returns bare command with plan when autoMode not set", () => {
     const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md" });
+    expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);
+  });
+
+  it("returns auto mode command when autoMode is true", () => {
+    expect(buildClaudeCommand({ autoMode: true })).toBe("claude --enable-auto-mode");
+  });
+
+  it("returns auto mode command with plan when autoMode is true", () => {
+    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: true });
     expect(cmd).toBe(`claude --enable-auto-mode "$(cat '/tmp/plan.md')"`);
   });
 
@@ -50,7 +59,7 @@ describe("buildClaudeCommand", () => {
     expect(buildClaudeCommand({ autoMode: false })).toBe("claude");
   });
 
-  it("returns command with plan but no auto mode", () => {
+  it("returns command with plan but no auto mode when autoMode is false", () => {
     const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: false });
     expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);
   });
