@@ -4,8 +4,8 @@
   "description": "CLI tool for managing git worktrees with smart environment setup",
   "type": "module",
   "bin": {
-    "wtr": "./dist/cli.js",
-    "worktree-cli": "./dist/cli.js"
+    "wtr": "dist/cli.js",
+    "worktree-cli": "dist/cli.js"
   },
   "files": [
     "dist"
