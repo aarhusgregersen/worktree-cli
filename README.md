@@ -5,7 +5,7 @@ CLI tool for managing git worktrees with smart environment setup, port bumping, 
 ## Installation
 
 ```bash
-npm install -g worktree-cli
+npm install -g @aarhusgregersen/worktree-cli
 ```
 
 Requires Node.js >= 20 and git.

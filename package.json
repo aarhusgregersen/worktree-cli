@@ -1,5 +1,5 @@
 {
-  "name": "worktree-cli",
+  "name": "@aarhusgregersen/worktree-cli",
   "version": "1.2.0",
   "description": "CLI tool for managing git worktrees with smart environment setup",
   "type": "module",
