@@ -35,6 +35,7 @@ raw \`git worktree\` commands. Key commands:
 - \`wtr add <branch> --plan "..."\` — create worktree and delegate task to Claude (preferred)
 - \`wtr add <branch> --open\` — create worktree and open terminal with interactive Claude
 - \`wtr add <branch>\` — create worktree only, no terminal (rarely needed)
+- \`wtr add <branch> --db\` — clone the **local** PostgreSQL database (not prod) into the worktree for isolated migrations
 - \`wtr list\` — list worktrees
 - \`wtr status\` — enriched status with branch/commit/PR info
 - \`wtr remove <id>\` — remove a worktree

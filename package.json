@@ -29,7 +29,16 @@
     "cli",
     "developer-tools"
   ],
+  "author": "Martin Aarhus Gregersen",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aarhusgregersen/worktree-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aarhusgregersen/worktree-cli/issues"
+  },
+  "homepage": "https://github.com/aarhusgregersen/worktree-cli#readme",
   "dependencies": {
     "@clack/prompts": "^0.11.0",
     "cli-table3": "^0.6.5",
