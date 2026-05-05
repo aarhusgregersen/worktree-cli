@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { isExcludedPort } from "../../src/config/schema.js";
+import {
+  DEFAULT_TERMINAL_CONFIG,
+  isExcludedPort,
+} from "../../src/config/schema.js";
+
+describe("DEFAULT_TERMINAL_CONFIG", () => {
+  it("does not steal focus by default", () => {
+    expect(DEFAULT_TERMINAL_CONFIG.focus).toBe(false);
+  });
+});
 
 describe("isExcludedPort", () => {
   it("excludes DATABASE_PORT by default", () => {

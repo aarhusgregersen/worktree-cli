@@ -224,7 +224,12 @@ Created by `wtr init` in the repository root. Add to `.gitignore`.
 {
   "copyFiles": [".env", ".env.local", ".vscode/settings.json"],
   "portOffset": 100,
-  "portExclusions": []
+  "portExclusions": [],
+  "terminal": {
+    "mode": "window",
+    "autoMode": false,
+    "focus": false
+  }
 }
 ```
 
@@ -239,6 +244,9 @@ Fallback configuration used when no local `.wtr.json` exists.
 | `copyFiles` | `[]` | File/directory patterns to copy from main worktree |
 | `portOffset` | `100` | Port increment per worktree index |
 | `portExclusions` | `[]` | Additional port variable patterns to exclude from bumping |
+| `terminal.mode` | `"window"` | `"window"` or `"tab"` — how new sessions open |
+| `terminal.autoMode` | `false` | Pass `--enable-auto-mode` when launching Claude |
+| `terminal.focus` | `false` | If `true`, the new terminal window steals focus. Default keeps focus on your current app. |
 
 ### Port Bumping
 

@@ -111,6 +111,9 @@ export const openCommand = new Command("open")
     const autoMode = configResult?.ok
       ? configResult.value.terminal.autoMode
       : false;
+    const terminalFocus = configResult?.ok
+      ? configResult.value.terminal.focus
+      : false;
 
     let command: string | undefined;
 
@@ -123,7 +126,13 @@ export const openCommand = new Command("open")
       command = buildClaudeCommand({ autoMode });
     }
 
-    openTerminalWindow({ cwd: worktree.path, command, env, mode: terminalMode });
+    openTerminalWindow({
+      cwd: worktree.path,
+      command,
+      env,
+      mode: terminalMode,
+      focus: terminalFocus,
+    });
 
     if (command) {
       log.info(

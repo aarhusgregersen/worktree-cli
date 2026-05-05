@@ -303,13 +303,23 @@ export const addCommand = new Command("add")
         ? configResult2.value.terminal.autoMode
         : false;
 
+      const terminalFocus = configResult2.ok
+        ? configResult2.value.terminal.focus
+        : false;
+
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand({ planPath, autoMode });
         log.info(`Plan written to ${formatPath(planPath)}`);
 
-        openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
+        openTerminalWindow({
+          cwd: worktreePath,
+          command,
+          env,
+          mode: terminalMode,
+          focus: terminalFocus,
+        });
         log.info("Opened terminal with Claude Code");
         log.info(
           "HANDOFF: A new Claude Code session has been launched in the worktree.",
@@ -319,7 +329,13 @@ export const addCommand = new Command("add")
         );
       } else if (options.open) {
         const command = buildClaudeCommand({ autoMode });
-        openTerminalWindow({ cwd: worktreePath, command, env, mode: terminalMode });
+        openTerminalWindow({
+          cwd: worktreePath,
+          command,
+          env,
+          mode: terminalMode,
+          focus: terminalFocus,
+        });
         log.info("Opened terminal with Claude Code");
         log.info(
           "HANDOFF: A new Claude Code session has been launched in the worktree.",

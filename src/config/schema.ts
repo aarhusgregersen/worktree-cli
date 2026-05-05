@@ -9,6 +9,7 @@ export type TerminalMode = "window" | "tab";
 export interface TerminalConfig {
   readonly mode: TerminalMode;
   readonly autoMode: boolean;
+  readonly focus: boolean;
 }
 
 export interface WtConfig {
@@ -21,6 +22,7 @@ export interface WtConfig {
 export const DEFAULT_TERMINAL_CONFIG: TerminalConfig = {
   mode: "window",
   autoMode: false,
+  focus: false,
 };
 
 export const DEFAULT_CONFIG: WtConfig = {

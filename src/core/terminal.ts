@@ -87,9 +87,11 @@ export const openTerminalWindow = (opts: {
   readonly command?: string;
   readonly env?: Record<string, string>;
   readonly mode?: TerminalMode;
+  readonly focus?: boolean;
 }): void => {
   const terminal = detectTerminal();
   const mode = opts.mode ?? "window";
+  const focus = opts.focus ?? false;
   const envExports = opts.env
     ? Object.entries(opts.env)
         .map(([k, v]) => `export ${k}=${escapeShell(v)}`)
@@ -105,22 +107,43 @@ export const openTerminalWindow = (opts: {
       openInCmux(opts.cwd, opts.command, opts.env);
       break;
     case "iterm2":
-      openInITerm2(fullCommand, mode);
+      openInITerm2(fullCommand, mode, focus);
       break;
     case "apple_terminal":
-      openInAppleTerminal(fullCommand, mode);
+      openInAppleTerminal(fullCommand, mode, focus);
       break;
     default:
-      openGeneric(terminal, opts.cwd, opts.command, mode);
+      openGeneric(terminal, opts.cwd, opts.command, mode, focus);
       break;
   }
+};
+
+// Wrap an AppleScript so the previously-frontmost app keeps focus after the
+// new terminal window is opened. The capture must happen before any `activate`
+// or `do script` call, since those steal focus immediately.
+const wrapPreserveFocus = (script: string, focus: boolean): string => {
+  if (focus) return script;
+  return `
+    tell application "System Events"
+      set previousApp to name of first application process whose frontmost is true
+    end tell
+    ${script}
+    delay 0.05
+    try
+      tell application previousApp to activate
+    end try
+  `;
 };
 
 const escapeAppleScript = (s: string): string => {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 };
 
-const openInITerm2 = (command: string, mode: TerminalMode): void => {
+const openInITerm2 = (
+  command: string,
+  mode: TerminalMode,
+  focus: boolean,
+): void => {
   const action =
     mode === "tab"
       ? `
@@ -136,16 +159,20 @@ const openInITerm2 = (command: string, mode: TerminalMode): void => {
         write text "${escapeAppleScript(command)}"
       end tell`;
 
-  const script = `
+  const inner = `
     tell application "iTerm2"
       ${action}
     end tell
   `;
-  execSync(`osascript -e ${escapeShell(script)}`);
+  execSync(`osascript -e ${escapeShell(wrapPreserveFocus(inner, focus))}`);
 };
 
-const openInAppleTerminal = (command: string, mode: TerminalMode): void => {
-  const script =
+const openInAppleTerminal = (
+  command: string,
+  mode: TerminalMode,
+  focus: boolean,
+): void => {
+  const inner =
     mode === "tab"
       ? `
     tell application "Terminal"
@@ -160,7 +187,7 @@ const openInAppleTerminal = (command: string, mode: TerminalMode): void => {
       activate
     end tell`;
 
-  execSync(`osascript -e ${escapeShell(script)}`);
+  execSync(`osascript -e ${escapeShell(wrapPreserveFocus(inner, focus))}`);
 };
 
 const openInCmux = (
@@ -209,8 +236,9 @@ const openInCmux = (
 const openGeneric = (
   terminal: string,
   cwd: string,
-  command?: string,
-  mode?: TerminalMode,
+  command: string | undefined,
+  mode: TerminalMode | undefined,
+  focus: boolean,
 ): void => {
   // For Ghostty, Warp, and others, try to open the app with the directory
   // and use System Events to type the command
@@ -218,6 +246,13 @@ const openGeneric = (
 
   if (appName) {
     try {
+      // No command + no focus: clean background launch with `open -g`.
+      if (!command && !focus) {
+        const flag = mode === "tab" ? "-gna" : "-ga";
+        execSync(`open ${flag} ${escapeShell(appName)}`);
+        return;
+      }
+
       if (mode === "tab") {
         // Try to open a new tab via Cmd+T keystroke
         const tabScript = `
@@ -228,6 +263,21 @@ const openGeneric = (
         execSync(`osascript -e ${escapeShell(tabScript)}`);
       } else {
         execSync(`open -a ${escapeShell(appName)}`);
+      }
+
+      // Capture the previously-frontmost app *after* the terminal app has
+      // taken focus (we need it focused to receive keystrokes), so we can
+      // restore focus once the keystrokes are sent.
+      let previousApp: string | undefined;
+      if (!focus) {
+        try {
+          previousApp = execSync(
+            `osascript -e 'tell application "System Events" to return name of first application process whose frontmost is true and name is not "${escapeAppleScript(appName)}"'`,
+            { encoding: "utf-8" },
+          ).trim();
+        } catch {
+          // Couldn't determine — skip restore
+        }
       }
 
       // Give the app a moment to open, then type the command
@@ -251,6 +301,16 @@ const openGeneric = (
           );
         }
       }
+
+      if (previousApp) {
+        try {
+          execSync(
+            `osascript -e ${escapeShell(`tell application "${escapeAppleScript(previousApp)}" to activate`)}`,
+          );
+        } catch {
+          // Best effort
+        }
+      }
     } catch {
       console.log(
         `Could not open terminal "${appName}". Run manually:\n  cd ${cwd}${command ? ` && ${command}` : ""}`,
@@ -261,13 +321,13 @@ const openGeneric = (
     const fullCommand = command
       ? `cd ${escapeShell(cwd)} && ${command}`
       : `cd ${escapeShell(cwd)}`;
-    const script = `
+    const inner = `
       tell application "Terminal"
         do script "${escapeAppleScript(fullCommand)}"
         activate
       end tell
     `;
-    execSync(`osascript -e ${escapeShell(script)}`);
+    execSync(`osascript -e ${escapeShell(wrapPreserveFocus(inner, focus))}`);
   }
 };
 
