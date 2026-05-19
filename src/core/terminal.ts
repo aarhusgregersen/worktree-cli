@@ -1,9 +1,8 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 import type { TerminalMode } from "../config/schema.js";
 
 export type TerminalApp =
@@ -82,6 +81,51 @@ export const buildClaudeCommand = (opts?: {
 // a long-running process like `claude` prevents the shell from updating it.
 const OSC7_PRINTF = `printf '\\033]7;file://%s%s\\033\\\\' "$(hostname)" "$(pwd)"`;
 
+// Write a temp shell script that the new terminal launches as its initial
+// command. Avoids TTY injection (`write text` / `do script` / keystrokes), so
+// stray keystrokes from the user typing during the focus shift cannot
+// interleave with the command being delivered to the new shell. After the
+// command exits we `exec` the user's interactive shell so the window remains
+// usable in the worktree directory.
+const writeLauncherScript = (opts: {
+  cwd: string;
+  env?: Record<string, string>;
+  command?: string;
+}): string => {
+  const filename = `wtr-launch-${randomUUID()}.sh`;
+  const filepath = join("/tmp", filename);
+
+  const lines: string[] = ["#!/bin/bash", ""];
+
+  // Inherit PATH from the wtr process. Terminal.app / iTerm2 are GUI-launched
+  // and start child shells with a minimal PATH that lacks Homebrew, pnpm,
+  // fnm, etc. — so `claude` and friends would not resolve. Carry the user's
+  // PATH from the wtr process (which was started from an interactive shell)
+  // into the new session.
+  if (process.env.PATH) {
+    lines.push(`export PATH=${escapeShell(process.env.PATH)}`);
+  }
+
+  if (opts.env) {
+    for (const [k, v] of Object.entries(opts.env)) {
+      lines.push(`export ${k}=${escapeShell(v)}`);
+    }
+  }
+
+  lines.push(`cd ${escapeShell(opts.cwd)}`);
+  lines.push(OSC7_PRINTF);
+
+  if (opts.command) {
+    lines.push(opts.command);
+  }
+
+  lines.push('exec "${SHELL:-/bin/bash}"');
+
+  writeFileSync(filepath, `${lines.join("\n")}\n`, "utf-8");
+  chmodSync(filepath, 0o755);
+  return filepath;
+};
+
 export const openTerminalWindow = (opts: {
   readonly cwd: string;
   readonly command?: string;
@@ -92,28 +136,29 @@ export const openTerminalWindow = (opts: {
   const terminal = detectTerminal();
   const mode = opts.mode ?? "window";
   const focus = opts.focus ?? false;
-  const envExports = opts.env
-    ? Object.entries(opts.env)
-        .map(([k, v]) => `export ${k}=${escapeShell(v)}`)
-        .join(" && ")
-    : "";
-  const prefix = envExports ? `${envExports} && ` : "";
-  const fullCommand = opts.command
-    ? `${prefix}cd ${escapeShell(opts.cwd)} && ${OSC7_PRINTF} && ${opts.command}`
-    : `${prefix}cd ${escapeShell(opts.cwd)}`;
+
+  if (terminal === "cmux") {
+    // cmux sends commands to an already-running session over a socket — no
+    // new window is created, so the focus/injection problem doesn't apply.
+    openInCmux(opts.cwd, opts.command, opts.env);
+    return;
+  }
+
+  const scriptPath = writeLauncherScript({
+    cwd: opts.cwd,
+    env: opts.env,
+    command: opts.command,
+  });
 
   switch (terminal) {
-    case "cmux":
-      openInCmux(opts.cwd, opts.command, opts.env);
-      break;
     case "iterm2":
-      openInITerm2(fullCommand, mode, focus);
+      openInITerm2(scriptPath, mode, focus);
       break;
     case "apple_terminal":
-      openInAppleTerminal(fullCommand, mode, focus);
+      openInAppleTerminal(scriptPath, mode, focus);
       break;
     default:
-      openGeneric(terminal, opts.cwd, opts.command, mode, focus);
+      openGeneric(terminal, scriptPath, mode, focus);
       break;
   }
 };
@@ -140,24 +185,22 @@ const escapeAppleScript = (s: string): string => {
 };
 
 const openInITerm2 = (
-  command: string,
+  scriptPath: string,
   mode: TerminalMode,
   focus: boolean,
 ): void => {
+  // Use iTerm2's `command` parameter so the new session execs our launcher
+  // script directly — no `write text` / TTY injection that could interleave
+  // with the user's typing during the brief focus shift.
+  const escaped = escapeAppleScript(scriptPath);
   const action =
     mode === "tab"
       ? `
       tell current window
-        create tab with default profile
-        tell current session
-          write text "${escapeAppleScript(command)}"
-        end tell
+        create tab with default profile command "${escaped}"
       end tell`
       : `
-      create window with default profile
-      tell current session of current window
-        write text "${escapeAppleScript(command)}"
-      end tell`;
+      create window with default profile command "${escaped}"`;
 
   const inner = `
     tell application "iTerm2"
@@ -168,25 +211,32 @@ const openInITerm2 = (
 };
 
 const openInAppleTerminal = (
-  command: string,
+  scriptPath: string,
   mode: TerminalMode,
   focus: boolean,
 ): void => {
-  const inner =
-    mode === "tab"
-      ? `
+  if (mode === "window") {
+    // `open -a Terminal <script>` makes Terminal run the script as a new
+    // window session — the shell execs the script directly, so there's no
+    // TTY injection. The `-g` flag keeps focus on the previously frontmost
+    // app.
+    const flag = focus ? "-a" : "-ga";
+    execSync(`open ${flag} Terminal ${escapeShell(scriptPath)}`);
+    return;
+  }
+
+  // Tab mode: AppleScript has no clean way to open a new tab and run a
+  // script without keystroke + injection. We type the path (short string —
+  // less prone to interleave damage than a multi-line command) and accept
+  // the limitation.
+  const inner = `
     tell application "Terminal"
       activate
       tell application "System Events" to tell process "Terminal" to keystroke "t" using command down
       delay 0.3
-      do script "${escapeAppleScript(command)}" in front window
-    end tell`
-      : `
-    tell application "Terminal"
-      do script "${escapeAppleScript(command)}"
-      activate
-    end tell`;
-
+      do script "${escapeAppleScript(scriptPath)}" in front window
+    end tell
+  `;
   execSync(`osascript -e ${escapeShell(wrapPreserveFocus(inner, focus))}`);
 };
 
@@ -235,8 +285,7 @@ const openInCmux = (
 
 const openGeneric = (
   terminal: string,
-  cwd: string,
-  command: string | undefined,
+  scriptPath: string,
   mode: TerminalMode | undefined,
   focus: boolean,
 ): void => {
@@ -244,15 +293,22 @@ const openGeneric = (
   // and use System Events to type the command
   const appName = resolveAppName(terminal);
 
+  if (appName === "Ghostty") {
+    // Ghostty supports launching with an initial command via `--command=`.
+    // Same benefit as iTerm2: the shell execs our script, no TTY injection.
+    const flag = focus ? "-a" : "-ga";
+    try {
+      execSync(
+        `open ${flag} Ghostty --args --command=${escapeShell(scriptPath)}`,
+      );
+      return;
+    } catch {
+      // Fall through to legacy keystroke approach if --args isn't accepted
+    }
+  }
+
   if (appName) {
     try {
-      // No command + no focus: clean background launch with `open -g`.
-      if (!command && !focus) {
-        const flag = mode === "tab" ? "-gna" : "-ga";
-        execSync(`open ${flag} ${escapeShell(appName)}`);
-        return;
-      }
-
       if (mode === "tab") {
         // Try to open a new tab via Cmd+T keystroke
         const tabScript = `
@@ -280,26 +336,25 @@ const openGeneric = (
         }
       }
 
-      // Give the app a moment to open, then type the command
-      if (command) {
-        const fullCommand = `cd ${escapeShell(cwd)} && ${command}`;
-        const script = `
-          delay 0.5
-          tell application "System Events"
-            tell process "${escapeAppleScript(appName)}"
-              keystroke "${escapeAppleScript(fullCommand)}"
-              keystroke return
-            end tell
+      // Type the launcher script path (much shorter than a full command —
+      // less prone to corruption if a stray keystroke from the user
+      // interleaves while the new window is grabbing focus).
+      const script = `
+        delay 0.5
+        tell application "System Events"
+          tell process "${escapeAppleScript(appName)}"
+            keystroke "${escapeAppleScript(scriptPath)}"
+            keystroke return
           end tell
-        `;
-        try {
-          execSync(`osascript -e ${escapeShell(script)}`);
-        } catch {
-          // System Events keystroke may fail without accessibility permissions
-          console.log(
-            `Hint: Could not type command automatically. Run manually:\n  cd ${cwd}${command ? ` && ${command}` : ""}`,
-          );
-        }
+        end tell
+      `;
+      try {
+        execSync(`osascript -e ${escapeShell(script)}`);
+      } catch {
+        // System Events keystroke may fail without accessibility permissions
+        console.log(
+          `Hint: Could not type command automatically. Run manually:\n  ${scriptPath}`,
+        );
       }
 
       if (previousApp) {
@@ -313,21 +368,14 @@ const openGeneric = (
       }
     } catch {
       console.log(
-        `Could not open terminal "${appName}". Run manually:\n  cd ${cwd}${command ? ` && ${command}` : ""}`,
+        `Could not open terminal "${appName}". Run manually:\n  ${scriptPath}`,
       );
     }
   } else {
-    // Fallback: use macOS `open` to open a new Terminal.app window
-    const fullCommand = command
-      ? `cd ${escapeShell(cwd)} && ${command}`
-      : `cd ${escapeShell(cwd)}`;
-    const inner = `
-      tell application "Terminal"
-        do script "${escapeAppleScript(fullCommand)}"
-        activate
-      end tell
-    `;
-    execSync(`osascript -e ${escapeShell(wrapPreserveFocus(inner, focus))}`);
+    // Fallback: open the launcher script with Terminal.app via `open`. The
+    // script execs the worktree command directly — no TTY injection.
+    const flag = focus ? "-a" : "-ga";
+    execSync(`open ${flag} Terminal ${escapeShell(scriptPath)}`);
   }
 };
 
