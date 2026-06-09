@@ -1,8 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const GLOBAL_CONFIG_DIR = join(homedir(), ".wt");
-export const GLOBAL_CONFIG_PATH = join(GLOBAL_CONFIG_DIR, "config.json");
+const xdgConfigHome =
+  process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+
+// XDG-conformant path (preferred). Legacy ~/.wt kept as a read fallback so
+// existing setups keep working.
+export const GLOBAL_CONFIG_PATH = join(xdgConfigHome, "wtr", "config.json");
+export const LEGACY_GLOBAL_CONFIG_PATH = join(homedir(), ".wt", "config.json");
 
 export type TerminalMode = "window" | "tab";
 

@@ -11,28 +11,36 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_TERMINAL_CONFIG,
   GLOBAL_CONFIG_PATH,
+  LEGACY_GLOBAL_CONFIG_PATH,
   type WtConfig,
 } from "./schema.js";
 
+const resolveGlobalConfigPath = (): string | null => {
+  if (existsSync(GLOBAL_CONFIG_PATH)) return GLOBAL_CONFIG_PATH;
+  if (existsSync(LEGACY_GLOBAL_CONFIG_PATH)) return LEGACY_GLOBAL_CONFIG_PATH;
+  return null;
+};
+
 export const loadGlobalConfig = (): Result<Partial<WtConfig>, Error> => {
-  if (!existsSync(GLOBAL_CONFIG_PATH)) {
+  const path = resolveGlobalConfigPath();
+  if (!path) {
     return ok({});
   }
 
   try {
-    const content = readFileSync(GLOBAL_CONFIG_PATH, "utf-8");
+    const content = readFileSync(path, "utf-8");
     return ok(JSON.parse(content) as Partial<WtConfig>);
   } catch (error) {
     return err(
       new Error(
-        `Failed to parse global config (~/.wt/config.json): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to parse global config (${path}): ${error instanceof Error ? error.message : String(error)}`,
       ),
     );
   }
 };
 
 export const globalConfigExists = (): boolean => {
-  return existsSync(GLOBAL_CONFIG_PATH);
+  return resolveGlobalConfigPath() !== null;
 };
 
 const mergeConfig = (
