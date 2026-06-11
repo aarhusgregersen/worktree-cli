@@ -47,12 +47,12 @@ describe("buildClaudeCommand", () => {
   });
 
   it("returns auto mode command when autoMode is true", () => {
-    expect(buildClaudeCommand({ autoMode: true })).toBe("claude --enable-auto-mode");
+    expect(buildClaudeCommand({ autoMode: true })).toBe("claude --permission-mode auto");
   });
 
   it("returns auto mode command with plan when autoMode is true", () => {
     const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: true });
-    expect(cmd).toBe(`claude --enable-auto-mode "$(cat '/tmp/plan.md')"`);
+    expect(cmd).toBe(`claude --permission-mode auto "$(cat '/tmp/plan.md')"`);
   });
 
   it("returns bare command when autoMode is false", () => {

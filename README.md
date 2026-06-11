@@ -245,7 +245,7 @@ Fallback configuration used when no local `.wtr.json` exists.
 | `portOffset` | `100` | Port increment per worktree index |
 | `portExclusions` | `[]` | Additional port variable patterns to exclude from bumping |
 | `terminal.mode` | `"window"` | `"window"` or `"tab"` — how new sessions open |
-| `terminal.autoMode` | `false` | Pass `--enable-auto-mode` when launching Claude |
+| `terminal.autoMode` | `false` | Pass `--permission-mode auto` when launching Claude |
 | `terminal.focus` | `false` | If `true`, the new terminal window steals focus. Default keeps focus on your current app. |
 
 ### Port Bumping
