@@ -36,6 +36,11 @@ raw \`git worktree\` commands. Key commands:
 - \`wtr add <branch> --open\` — create worktree and open terminal with interactive Claude
 - \`wtr add <branch>\` — create worktree only, no terminal (rarely needed)
 - \`wtr add <branch> --db\` — clone the **local** PostgreSQL database (not prod) into the worktree for isolated migrations
+
+New branches are always based on \`origin/<default-branch>\` (main/master), never the
+current branch — fetched first so the worktree starts from clean, up-to-date main.
+Override with \`--base <ref>\`.
+
 - \`wtr list\` — list worktrees
 - \`wtr status\` — enriched status with branch/commit/PR info
 - \`wtr remove <id>\` — remove a worktree
