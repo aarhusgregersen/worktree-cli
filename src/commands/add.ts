@@ -66,6 +66,10 @@ export const addCommand = new Command("add")
     "--plan-file <path>",
     "Open terminal with Claude Code and a plan from a file (implies --open)",
   )
+  .option(
+    "--model <name>",
+    "Model for the new Claude Code session (e.g. sonnet, opus, haiku)",
+  )
   .option("--json", "Output as JSON")
   .action(async (branch: string, pathArg: string | undefined, options) => {
     const json = options.json ?? false;
@@ -310,7 +314,11 @@ export const addCommand = new Command("add")
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        const command = buildClaudeCommand({ planPath, autoMode });
+        const command = buildClaudeCommand({
+          planPath,
+          autoMode,
+          model: options.model,
+        });
         log.info(`Plan written to ${formatPath(planPath)}`);
 
         openTerminalWindow({
@@ -328,7 +336,7 @@ export const addCommand = new Command("add")
           "Do NOT continue working on the delegated task in this session.",
         );
       } else if (options.open) {
-        const command = buildClaudeCommand({ autoMode });
+        const command = buildClaudeCommand({ autoMode, model: options.model });
         openTerminalWindow({
           cwd: worktreePath,
           command,
@@ -352,7 +360,7 @@ export const addCommand = new Command("add")
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        const command = buildClaudeCommand({ planPath });
+        const command = buildClaudeCommand({ planPath, model: options.model });
         jsonResult.command = command;
         jsonResult.planPath = planPath;
       }

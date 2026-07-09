@@ -95,6 +95,7 @@ _wtr() {
             '--open[Open terminal with Claude]' \\
             '--plan[Plan text]:text' \\
             '--plan-file[Plan file]:file:_files' \\
+            '--model[Model for Claude session]:model' \\
             '--json[JSON output]'
           ;;
         completions)

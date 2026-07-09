@@ -63,4 +63,18 @@ describe("buildClaudeCommand", () => {
     const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: false });
     expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);
   });
+
+  it("returns command with model flag when model is set", () => {
+    expect(buildClaudeCommand({ model: "opus" })).toBe("claude --model 'opus'");
+  });
+
+  it("combines model and auto mode flags", () => {
+    const cmd = buildClaudeCommand({ model: "haiku", autoMode: true });
+    expect(cmd).toBe("claude --permission-mode auto --model 'haiku'");
+  });
+
+  it("combines model flag with plan", () => {
+    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", model: "opus" });
+    expect(cmd).toBe(`claude --model 'opus' "$(cat '/tmp/plan.md')"`);
+  });
 });

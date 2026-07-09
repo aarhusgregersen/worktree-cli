@@ -33,6 +33,10 @@ export const openCommand = new Command("open")
     "--plan-file <path>",
     "Start Claude Code with a plan from a file (implies --claude)",
   )
+  .option(
+    "--model <name>",
+    "Model for the new Claude Code session (e.g. sonnet, opus, haiku)",
+  )
   .option("--json", "Output as JSON")
   .action(async (identifier: string | undefined, options) => {
     const json = options.json ?? false;
@@ -86,9 +90,9 @@ export const openCommand = new Command("open")
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
-        command = buildClaudeCommand({ planPath });
+        command = buildClaudeCommand({ planPath, model: options.model });
       } else if (options.claude) {
-        command = buildClaudeCommand();
+        command = buildClaudeCommand({ model: options.model });
       }
 
       printJson({
@@ -120,10 +124,14 @@ export const openCommand = new Command("open")
     if (options.plan || options.planFile) {
       const planText = await resolvePlanText(options);
       const planPath = writePlanToTempFile(planText);
-      command = buildClaudeCommand({ planPath, autoMode });
+      command = buildClaudeCommand({
+        planPath,
+        autoMode,
+        model: options.model,
+      });
       log.info(`Plan written to ${formatPath(planPath)}`);
     } else if (options.claude) {
-      command = buildClaudeCommand({ autoMode });
+      command = buildClaudeCommand({ autoMode, model: options.model });
     }
 
     openTerminalWindow({

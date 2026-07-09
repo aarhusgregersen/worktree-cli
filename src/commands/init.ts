@@ -51,7 +51,14 @@ When creating a worktree, almost always use \`--plan\` (if you have instructions
 delegate) or \`--open\` (if interactive exploration is needed). Using bare \`wtr add\`
 without either flag is rare — only do it when the user explicitly doesn't want a
 terminal opened. After \`--plan\` or \`--open\`, hand off and do NOT continue the
-delegated task in the current session.`;
+delegated task in the current session.
+
+Both \`--plan\` and \`--open\` accept \`--model <name>\` to pick which model the
+delegated session runs on. Judge the task before delegating: mechanical or
+narrowly-scoped work (rename, small fix, boilerplate) → a cheaper/faster model
+(e.g. \`haiku\`); hard architectural, ambiguous, or high-stakes work → a stronger
+model (e.g. \`opus\`); everything in between → omit the flag and let it default.
+Don't default to the strongest model out of caution — match the model to the task.`;
 
 const CLAUDE_MD_MARKER = "## wtr (worktree-cli)";
 

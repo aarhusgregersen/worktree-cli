@@ -67,8 +67,11 @@ const escapeShell = (s: string): string => {
 export const buildClaudeCommand = (opts?: {
   planPath?: string;
   autoMode?: boolean;
+  model?: string;
 }): string => {
-  const flags = opts?.autoMode === true ? " --permission-mode auto" : "";
+  const autoFlag = opts?.autoMode === true ? " --permission-mode auto" : "";
+  const modelFlag = opts?.model ? ` --model ${escapeShell(opts.model)}` : "";
+  const flags = `${autoFlag}${modelFlag}`;
   if (opts?.planPath) {
     return `claude${flags} "$(cat ${escapeShell(opts.planPath)})"`;
   }
