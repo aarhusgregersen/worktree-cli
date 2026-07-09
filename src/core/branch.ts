@@ -1,5 +1,8 @@
+import { isAbsolute, resolve } from "node:path";
 import { type Result, ok } from "../utils/result.js";
+import { isGhAvailable, isPrMerged } from "./gh.js";
 import { executeGitCommand } from "./git.js";
+import { cacheMerged, isCachedMerged } from "./mergeCache.js";
 
 export const branchExists = async (
   branchName: string,
@@ -39,12 +42,50 @@ export const isBranchMerged = async (
     if (merged) return true;
   }
 
-  // Fall back to squash-merge detection: create a temporary commit that
-  // represents the branch squashed onto the merge-base, then use git-cherry
-  // to check whether that change already exists in the target. This handles
-  // GitHub "Squash and merge" where the original commits are not ancestors
-  // of the target branch.
+  // Plain --merged only catches fast-forward/merge-commit merges, not GitHub
+  // "Squash and merge" (the squashed commit has a new SHA, so the branch's
+  // commits are never ancestors of the target). Try the cheap authoritative
+  // paths first — persistent cache, then `gh` — before falling back to the
+  // expensive local git reconstruction.
+  const fast = await fastIsSquashMerged(branchName, cwd);
+  if (fast === true) return true;
+
   return isSquashMerged(branchName, targetBranch, cwd);
+};
+
+// Resolve a stable identity for the repository (shared across all its
+// worktrees) to key the merged cache. --git-common-dir points at the main
+// repo's .git even from a linked worktree.
+const getRepoId = async (cwd?: string): Promise<string> => {
+  const result = await executeGitCommand(["rev-parse", "--git-common-dir"], {
+    cwd,
+  });
+  if (!result.ok) return cwd ?? "";
+  const dir = result.value.stdout.trim();
+  return isAbsolute(dir) ? dir : resolve(cwd ?? process.cwd(), dir);
+};
+
+// Fast, authoritative squash-merge check backed by the GitHub PR state.
+// Returns true only when we can positively confirm the branch was merged
+// (cache hit, or `gh` reports the PR as MERGED). Returns null when we cannot
+// confirm — gh is missing, unauthenticated, the PR is from a fork, or there is
+// simply no PR — so the caller falls back to local git detection. We never
+// return false: a negative gh result does not prove the branch is unmerged.
+const fastIsSquashMerged = async (
+  branch: string,
+  cwd?: string,
+): Promise<boolean | null> => {
+  const repoId = await getRepoId(cwd);
+  if (isCachedMerged(repoId, branch)) return true;
+
+  if (!(await isGhAvailable())) return null;
+
+  if (await isPrMerged(branch, cwd)) {
+    cacheMerged(repoId, branch);
+    return true;
+  }
+
+  return null;
 };
 
 const isSquashMerged = async (
@@ -58,10 +99,9 @@ const isSquashMerged = async (
   );
   if (!mergeBase.ok) return false;
 
-  const tree = await executeGitCommand(
-    ["rev-parse", `${branchName}^{tree}`],
-    { cwd },
-  );
+  const tree = await executeGitCommand(["rev-parse", `${branchName}^{tree}`], {
+    cwd,
+  });
   if (!tree.ok) return false;
 
   const tempCommit = await executeGitCommand(
@@ -87,18 +127,28 @@ const isSquashMerged = async (
   return cherry.value.stdout.trim().startsWith("-");
 };
 
+// The default branch is invariant for the lifetime of a CLI invocation, so
+// memoize per cwd to avoid re-spawning git across the many callers.
+const defaultBranchCache = new Map<string, string>();
+
 export const getDefaultBranch = async (cwd?: string): Promise<string> => {
+  const cacheKey = cwd ?? "";
+  const cached = defaultBranchCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
   const result = await executeGitCommand(
     ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
     { cwd },
   );
 
-  if (result.ok) {
-    return result.value.stdout.trim().replace("origin/", "");
-  }
+  const value = result.ok
+    ? result.value.stdout.trim().replace("origin/", "")
+    : (await branchExists("main", cwd))
+      ? "main"
+      : "master";
 
-  const mainExists = await branchExists("main", cwd);
-  return mainExists ? "main" : "master";
+  defaultBranchCache.set(cacheKey, value);
+  return value;
 };
 
 export const getCurrentBranch = async (
@@ -173,10 +223,9 @@ export const getLastCommitDate = async (
   format: string,
   cwd?: string,
 ): Promise<string> => {
-  const result = await executeGitCommand(
-    ["log", "-1", `--format=${format}`],
-    { cwd },
-  );
+  const result = await executeGitCommand(["log", "-1", `--format=${format}`], {
+    cwd,
+  });
   if (!result.ok) return "";
   return result.value.stdout.trim();
 };

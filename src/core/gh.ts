@@ -20,13 +20,25 @@ export interface CreatePrOptions {
   readonly cwd?: string;
 }
 
+let ghAvailable: boolean | null = null;
+
 export const isGhAvailable = async (): Promise<boolean> => {
+  if (ghAvailable !== null) return ghAvailable;
   try {
     await execFileAsync("gh", ["--version"]);
-    return true;
+    ghAvailable = true;
   } catch {
-    return false;
+    ghAvailable = false;
   }
+  return ghAvailable;
+};
+
+export const isPrMerged = async (
+  branch: string,
+  cwd?: string,
+): Promise<boolean> => {
+  const pr = await getPrForBranch(branch, cwd);
+  return pr?.state === "MERGED";
 };
 
 export const getPrForBranch = async (

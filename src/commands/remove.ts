@@ -176,11 +176,10 @@ export const removeCommand = new Command("remove")
       }
     } else if (worktree.branch && !skipConfirm) {
       const defaultBranch = await getDefaultBranch();
-      const isMerged = await isBranchMerged(worktree.branch, defaultBranch);
-      const commitsAhead = await getCommitsAhead(
-        worktree.branch,
-        defaultBranch,
-      );
+      const [isMerged, commitsAhead] = await Promise.all([
+        isBranchMerged(worktree.branch, defaultBranch),
+        getCommitsAhead(worktree.branch, defaultBranch),
+      ]);
       const isClean = isMerged || commitsAhead === 0;
 
       let activeLabel: string;
@@ -220,7 +219,9 @@ export const removeCommand = new Command("remove")
         branch: worktree.branch,
         removed: true,
         branchDeleted,
-        ...(worktreeDbName ? { databaseDropped, database: worktreeDbName } : {}),
+        ...(worktreeDbName
+          ? { databaseDropped, database: worktreeDbName }
+          : {}),
       });
     } else {
       outro(`Removed worktree at ${formatPath(worktree.path)}`);

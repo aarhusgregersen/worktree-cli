@@ -4,10 +4,15 @@ import { join } from "node:path";
 const xdgConfigHome =
   process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 
+const xdgCacheHome = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
+
 // XDG-conformant path (preferred). Legacy ~/.wt kept as a read fallback so
 // existing setups keep working.
 export const GLOBAL_CONFIG_PATH = join(xdgConfigHome, "wtr", "config.json");
 export const LEGACY_GLOBAL_CONFIG_PATH = join(homedir(), ".wt", "config.json");
+
+// Persistent cache of branches known to be merged (see core/mergeCache.ts).
+export const GLOBAL_CACHE_PATH = join(xdgCacheHome, "wtr", "merged.json");
 
 export type TerminalMode = "window" | "tab";
 
