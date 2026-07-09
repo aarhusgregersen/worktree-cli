@@ -16,6 +16,7 @@ import { pruneCommand } from "./commands/prune.js";
 import { removeCommand } from "./commands/remove.js";
 import { statusCommand } from "./commands/status.js";
 import { syncCommand } from "./commands/sync.js";
+import { maybeShowWelcome, printGettingStarted } from "./output/welcome.js";
 
 const program = new Command();
 
@@ -42,5 +43,14 @@ program.addCommand(execCommand);
 program.addCommand(eachCommand);
 program.addCommand(syncCommand);
 program.addCommand(completionsCommand);
+
+const welcomed = maybeShowWelcome();
+
+// Bare `wtr` with no subcommand: show the getting-started block, then help.
+if (process.argv.length <= 2) {
+  if (!welcomed) printGettingStarted();
+  program.outputHelp();
+  process.exit(0);
+}
 
 program.parseAsync(process.argv);

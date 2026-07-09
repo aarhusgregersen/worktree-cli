@@ -1,18 +1,24 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const xdgConfigHome =
-  process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+const xdgConfigHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 
 const xdgCacheHome = process.env.XDG_CACHE_HOME || join(homedir(), ".cache");
 
-// XDG-conformant path (preferred). Legacy ~/.wt kept as a read fallback so
+// XDG-conformant paths (preferred). Legacy ~/.wt kept as a read fallback so
 // existing setups keep working.
-export const GLOBAL_CONFIG_PATH = join(xdgConfigHome, "wtr", "config.json");
+export const GLOBAL_CONFIG_DIR = join(xdgConfigHome, "wtr");
+export const GLOBAL_CONFIG_PATH = join(GLOBAL_CONFIG_DIR, "config.json");
 export const LEGACY_GLOBAL_CONFIG_PATH = join(homedir(), ".wt", "config.json");
 
+export const GLOBAL_CACHE_DIR = join(xdgCacheHome, "wtr");
+
 // Persistent cache of branches known to be merged (see core/mergeCache.ts).
-export const GLOBAL_CACHE_PATH = join(xdgCacheHome, "wtr", "merged.json");
+export const GLOBAL_CACHE_PATH = join(GLOBAL_CACHE_DIR, "merged.json");
+
+// Marker written after the first-run welcome banner is shown, so it only
+// appears once. Regenerable state, so it lives in the XDG cache dir.
+export const WELCOME_MARKER_PATH = join(GLOBAL_CACHE_DIR, ".welcomed");
 
 export type TerminalMode = "window" | "tab";
 
