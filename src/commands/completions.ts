@@ -10,7 +10,7 @@ _wtr_completions() {
   COMPREPLY=()
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
-  commands="init add list remove open prune status diff pr cleanup current cd exec each sync completions"
+  commands="init add list remove open status diff pr clean current cd exec each sync completions"
 
   case "\${prev}" in
     wtr)
@@ -55,11 +55,10 @@ _wtr() {
     'list:List all worktrees'
     'remove:Remove a worktree'
     'open:Open a worktree in a new terminal window'
-    'prune:Remove stale worktree entries'
     'status:Show enriched status of all worktrees'
     'diff:Show diff for a worktree'
     'pr:Create a pull request for a worktree'
-    'cleanup:Remove worktrees with merged branches'
+    'clean:Remove stale entries and merged worktrees'
     'current:Show the current worktree'
     'cd:Print the path of a worktree'
     'exec:Run a command in a worktree directory'
@@ -114,7 +113,7 @@ _wtr`;
 const FISH_COMPLETIONS = `# wtr fish completions
 # Install: wtr completions fish > ~/.config/fish/completions/wtr.fish
 
-set -l commands init add list remove open prune status diff pr cleanup current cd exec each sync completions
+set -l commands init add list remove open status diff pr clean current cd exec each sync completions
 
 # Disable file completions by default
 complete -c wtr -f
@@ -125,11 +124,10 @@ complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a add -d "Create
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a list -d "List all worktrees"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a remove -d "Remove a worktree"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a open -d "Open a worktree in a new terminal window"
-complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a prune -d "Remove stale worktree entries"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a status -d "Show enriched status of all worktrees"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a diff -d "Show diff for a worktree"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a pr -d "Create a pull request for a worktree"
-complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a cleanup -d "Remove worktrees with merged branches"
+complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a clean -d "Remove stale entries and merged worktrees"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a current -d "Show the current worktree"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a cd -d "Print the path of a worktree"
 complete -c wtr -n "not __fish_seen_subcommand_from $commands" -a exec -d "Run a command in a worktree directory"

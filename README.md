@@ -177,27 +177,23 @@ wtr remove 1 --delete-branch  # Also delete branch
 wtr remove 1 --force          # Force remove (locked/dirty)
 ```
 
-### `wtr cleanup`
+### `wtr clean`
 
-Remove worktrees whose branches have been merged (via git or PR).
-
-```bash
-wtr cleanup                    # Interactive cleanup
-wtr cleanup --dry-run          # Show candidates without removing
-wtr cleanup --delete-branches  # Also delete merged branches
-wtr cleanup --force -y         # Force remove dirty worktrees
-```
-
-### `wtr prune`
-
-Remove stale worktree entries for directories that no longer exist on disk.
+Clean up a repo in one command. By default it does **both**: prunes stale
+worktree entries (directories that no longer exist on disk) **and** removes
+worktrees whose branches have been merged — detected via git merge **or** a
+merged GitHub PR (so squash-merges count too).
 
 ```bash
-wtr prune                     # Prune stale entries
-wtr prune --merged            # Also remove merged worktrees
-wtr prune --delete-branches   # Delete branches for pruned entries
-wtr prune --dry-run           # Preview only
+wtr clean                     # Prune stale + remove merged (both)
+wtr clean --dangling          # Only prune stale entries
+wtr clean --merged            # Only remove merged worktrees
+wtr clean --dry-run           # Preview only, no changes
+wtr clean --delete-branches   # Also delete the associated branches
+wtr clean --force -y          # Include dirty worktrees, skip confirmation
 ```
+
+Worktrees with uncommitted changes are skipped unless `--force` is given.
 
 ### `wtr completions [shell]`
 
@@ -328,7 +324,7 @@ wtr status
 wtr sync --all
 
 # Clean up after merge
-wtr cleanup -y --delete-branches
+wtr clean -y --delete-branches
 ```
 
 ## Environment Variables

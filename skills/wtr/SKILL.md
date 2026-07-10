@@ -13,7 +13,7 @@ argument-hint: [subcommand or question]
 
 ## Rules
 
-1. **Pass `--json` for informational commands** — use `--json` with: `list`, `status`, `diff`, `pr`, `remove`, `cleanup`, `prune`, `init`, `current`, `cd`, `exec`, `each`, `sync`. **Omit `--json` when opening terminals** (`wtr add --plan`, `wtr add --open`, `wtr open --claude`, `wtr open --plan`) so that `wtr` spawns the terminal window directly via osascript.
+1. **Pass `--json` for informational commands** — use `--json` with: `list`, `status`, `diff`, `pr`, `remove`, `clean`, `init`, `current`, `cd`, `exec`, `each`, `sync`. **Omit `--json` when opening terminals** (`wtr add --plan`, `wtr add --open`, `wtr open --claude`, `wtr open --plan`) so that `wtr` spawns the terminal window directly via osascript.
 2. **Never use raw `git worktree`** — always use `wtr` which wraps it with env setup and structured output.
 3. **`wtr add` must run from the main worktree** — it will refuse to run from inside a non-main worktree.
 4. **Always use `--open` or `--plan` when creating worktrees from an existing session** — when the user asks you to spin up a worktree for a task, always include `--open` (for interactive Claude) or `--plan` (to delegate with instructions). This opens a new terminal automatically so the user can seamlessly continue in the new worktree without manual steps. Omit these flags only when the user explicitly says they don't want a terminal opened.
@@ -55,8 +55,7 @@ You can also use `wtr current --json` to get full details about the current work
 | `wtr db drop` | Drop the cloned DB for the current worktree | `--json`, `-y` |
 | `wtr db status` | Show DB info for the current worktree | `--json` |
 | `wtr remove <id>` | Remove a worktree | `--json`, `--delete-branch`, `-y` |
-| `wtr cleanup` | Remove worktrees with merged branches | `--dry-run`, `--json`, `--delete-branches` |
-| `wtr prune` | Remove stale worktree entries | `--merged`, `--json`, `-y` |
+| `wtr clean` | Prune stale entries + remove merged worktrees (both by default) | `--dangling`, `--merged`, `--dry-run`, `--delete-branches`, `--force`, `--json`, `-y` |
 | `wtr init` | Initialize wtr config for repo | `--json`, `-y` |
 | `wtr completions [shell]` | Generate shell completions | `bash`, `zsh`, `fish` |
 
@@ -201,11 +200,15 @@ This pushes the branch (if needed) and creates a draft PR.
 ### Clean up after merge
 
 ```bash
-# See what would be removed
-wtr cleanup --dry-run --json
+# See what would be removed (stale + merged)
+wtr clean --dry-run --json
 
-# Remove merged worktrees and their branches
-wtr cleanup --delete-branches --json
+# Prune stale entries and remove merged worktrees + their branches
+wtr clean --delete-branches --json
+
+# Scope to just one phase
+wtr clean --merged --delete-branches --json   # only merged worktrees
+wtr clean --dangling --json                   # only stale entries
 ```
 
 ## Port Awareness
@@ -259,7 +262,7 @@ wtr db drop
 | "Is there a PR for this branch?" | `wtr status --json` (check `pr` field) |
 | "Is Claude already working on something?" | `wtr status --json` (check `claude` field) |
 | "Create a PR for worktree 1" | `wtr pr 1 --title "..." --json` |
-| "Clean up merged branches" | `wtr cleanup --delete-branches --json` |
+| "Clean up merged branches" | `wtr clean --merged --delete-branches --json` |
 | "Start a new parallel task (interactive)" | `wtr add feature/name --open` (no `--json`) |
 | "Delegate a task to another Claude" | `wtr add feature/name --plan "..."` (no `--json`) |
 | "Work on migrations in isolation" | `wtr add feature/name --db --plan "..."` (no `--json`) |

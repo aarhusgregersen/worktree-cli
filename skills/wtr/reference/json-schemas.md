@@ -272,10 +272,11 @@ With `--uncommitted`, adds `"uncommitted": true` to the output.
 
 When a PR already exists, `existed` is `true` and `pushed` is `false`.
 
-## `wtr cleanup --json`
+## `wtr clean --json`
 
 ```json
 {
+  "pruned": ["stale-entry-1", "stale-entry-2"],
   "candidates": [
     {
       "path": "/path/to/worktree",
@@ -301,24 +302,10 @@ When a PR already exists, `existed` is `true` and `pushed` is `false`.
 }
 ```
 
-With `--dry-run`, `removed` is always empty.
-
-## `wtr prune --json`
-
-```json
-{
-  "pruned": ["stale-entry-1", "stale-entry-2"],
-  "mergedRemoved": [
-    {
-      "path": "/path/to/worktree",
-      "branch": "feature/old",
-      "branchDeleted": true
-    }
-  ]
-}
-```
-
-The `mergedRemoved` array is only populated when `--merged` is used.
+- `pruned` — stale worktree entries removed (dangling phase). Populated unless scoped with `--merged`.
+- `candidates` / `removed` / `skipped` — merged-branch phase. Populated unless scoped with `--dangling`.
+- `reason` for a candidate is `"branch merged"` or `"PR merged"`.
+- With `--dry-run`, `removed` is always empty and `pruned` lists what *would* be pruned.
 
 ## `wtr init --json`
 
