@@ -43,7 +43,8 @@ Override with \`--base <ref>\`.
 
 - \`wtr list\` — list worktrees
 - \`wtr status\` — enriched status with branch/commit/PR info
-- \`wtr remove <id>\` — remove a worktree
+- \`wtr remove <id>\` — remove a worktree (interactive: prompts to confirm, then to delete the branch)
+- \`wtr remove <id> -y\` — skip prompts; use in scripts, \`/loop\`, or headless runs where no tty can answer. Add \`--delete-branch\` only when the branch is merged and you intend to clean it up
 - \`wtr pr <id>\` — create a GitHub PR for a worktree
 All commands support \`--json\` for structured output.
 
