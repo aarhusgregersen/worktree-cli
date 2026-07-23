@@ -10,7 +10,9 @@ import { branchExists, fetchOrigin, getDefaultBranch } from "../core/branch.js";
 import {
   createDatabase,
   deriveDbName,
+  ensureWorktreeEnv,
   findDatabaseUrl,
+  parseConnection,
   parseDatabaseName,
   updateDatabaseUrlInEnvFiles,
   writeWorktreeDb,
@@ -49,7 +51,10 @@ export const addCommand = new Command("add")
   .argument("[path]", "Worktree path (optional)")
   .option("-b, --create", "Create new branch if it does not exist")
   .option("-B, --force-create", "Create or reset branch")
-  .option("--base <ref>", "Base ref for new branch (default: origin/<default-branch>)")
+  .option(
+    "--base <ref>",
+    "Base ref for new branch (default: origin/<default-branch>)",
+  )
   .option("--detach", "Create in detached HEAD state")
   .option("--no-copy", "Skip copying files from main worktree")
   .option("--no-bump", "Skip port bumping")
@@ -257,23 +262,52 @@ export const addCommand = new Command("add")
 
     // Database cloning (--db)
     if (options.db !== undefined) {
-      const dbSource = findDatabaseUrl(worktreePath) ?? findDatabaseUrl(mainWorktreePath);
+      const dbSource =
+        findDatabaseUrl(worktreePath) ?? findDatabaseUrl(mainWorktreePath);
 
       if (!dbSource) {
-        if (!json) log.warning("No DATABASE_URL found in .env files — skipping database clone");
+        if (!json)
+          log.warning(
+            "No DATABASE_URL found in .env files — skipping database clone",
+          );
       } else {
         const templateDb = parseDatabaseName(dbSource.url);
         if (!templateDb) {
-          if (!json) log.warning(`Could not parse database name from ${dbSource.key} — skipping database clone`);
+          if (!json)
+            log.warning(
+              `Could not parse database name from ${dbSource.key} — skipping database clone`,
+            );
         } else {
+          // Ensure the worktree has an env file with DATABASE_URL, so the
+          // updated URL (and the rest of main's env) is reachable by the
+          // delegated session. `wtr add` only copies files listed in config;
+          // --db needs the env regardless of that config.
+          const envResult = ensureWorktreeEnv(
+            worktreePath,
+            mainWorktreePath,
+            dbSource.file,
+          );
+          if (!envResult.ok) {
+            if (!json)
+              log.warning(
+                `Could not copy ${dbSource.file}: ${envResult.error.message}`,
+              );
+          } else if (envResult.value && !json) {
+            log.info(`Copied ${dbSource.file} into worktree for DATABASE_URL`);
+          }
+
           // Determine new database name: use explicit name or derive from branch
           const newDbName =
             typeof options.db === "string"
               ? options.db
               : deriveDbName(templateDb, branch);
 
-          s?.start(`Cloning database ${pc.cyan(templateDb)} → ${pc.cyan(newDbName)}`);
-          const dbResult = createDatabase(newDbName, templateDb);
+          const connection = parseConnection(dbSource.url);
+
+          s?.start(
+            `Cloning database ${pc.cyan(templateDb)} → ${pc.cyan(newDbName)}`,
+          );
+          const dbResult = createDatabase(newDbName, templateDb, connection);
 
           if (!dbResult.ok) {
             s?.stop(pc.red("Database clone failed"));
@@ -283,9 +317,15 @@ export const addCommand = new Command("add")
             s?.stop(pc.green("Database cloned"));
 
             // Update DATABASE_URL in the worktree's .env files
-            const updateResult = updateDatabaseUrlInEnvFiles(worktreePath, newDbName);
+            const updateResult = updateDatabaseUrlInEnvFiles(
+              worktreePath,
+              newDbName,
+            );
             if (updateResult.ok && updateResult.value.length > 0) {
-              if (!json) log.info(`Updated DATABASE_URL in: ${updateResult.value.join(", ")}`);
+              if (!json)
+                log.info(
+                  `Updated DATABASE_URL in: ${updateResult.value.join(", ")}`,
+                );
             }
 
             // Track the database name for cleanup on removal

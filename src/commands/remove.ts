@@ -6,9 +6,14 @@ import {
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
-import { dropDatabase, readWorktreeDb } from "../core/database.js";
+import {
+  dropDatabase,
+  findDatabaseUrl,
+  parseConnection,
+  readWorktreeDb,
+} from "../core/database.js";
 import { ErrorCode } from "../core/errors.js";
-import { isGitRepository } from "../core/git.js";
+import { getMainWorktreePath, isGitRepository } from "../core/git.js";
 import {
   type WorktreeInfo,
   findWorktree,
@@ -132,8 +137,16 @@ export const removeCommand = new Command("remove")
     let databaseDropped = false;
 
     if (worktreeDbName) {
+      // Reach the server the clone lives on, parsed from the worktree's
+      // DATABASE_URL (falls back to main's env if the worktree has none).
+      const mainResult = await getMainWorktreePath();
+      const dbSource =
+        findDatabaseUrl(worktree.path) ??
+        (mainResult.ok ? findDatabaseUrl(mainResult.value) : undefined);
+      const connection = dbSource ? parseConnection(dbSource.url) : {};
+
       s?.start(`Dropping database ${pc.cyan(worktreeDbName)}`);
-      const dbResult = dropDatabase(worktreeDbName);
+      const dbResult = dropDatabase(worktreeDbName, connection);
       if (dbResult.ok) {
         s?.stop(pc.green(`Database ${worktreeDbName} dropped`));
         databaseDropped = true;

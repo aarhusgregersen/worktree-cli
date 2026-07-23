@@ -1,9 +1,75 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Result, err, ok } from "../utils/result.js";
+import { copyFiles } from "./env.js";
 
 const WTR_DB_FILE = ".wtr-db";
+
+/**
+ * Connection details for reaching a PostgreSQL server, derived from a
+ * DATABASE_URL. Without these, createdb/dropdb fall back to PGHOST/PGPORT or
+ * localhost:5432 — which breaks any non-default setup (docker on a mapped
+ * port, a remote host, a non-default user).
+ */
+export interface DbConnection {
+  readonly host?: string;
+  readonly port?: string;
+  readonly user?: string;
+  readonly password?: string;
+}
+
+/**
+ * Extract connection details (host/port/user/password) from a DATABASE_URL.
+ * Returns an empty object if the URL cannot be parsed.
+ */
+export const parseConnection = (url: string): DbConnection => {
+  try {
+    const u = new URL(url);
+    return {
+      host: u.hostname || undefined,
+      port: u.port || undefined,
+      user: u.username ? decodeURIComponent(u.username) : undefined,
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+    };
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Build the createdb/dropdb connection flags from a DbConnection.
+ * Password is passed via PGPASSWORD in the environment, never on argv.
+ */
+const connectionArgs = (connection: DbConnection): string[] => {
+  const args: string[] = [];
+  if (connection.host) args.push("-h", connection.host);
+  if (connection.port) args.push("-p", connection.port);
+  if (connection.user) args.push("-U", connection.user);
+  return args;
+};
+
+/**
+ * Build the child-process env, injecting PGPASSWORD when a password is present.
+ */
+const connectionEnv = (connection: DbConnection): NodeJS.ProcessEnv =>
+  connection.password
+    ? { ...process.env, PGPASSWORD: connection.password }
+    : process.env;
+
+/**
+ * Pull the most useful text out of a child_process error: stderr first (where
+ * createdb/dropdb write their diagnostics), then the generic message.
+ */
+const childErrorText = (error: unknown): string => {
+  if (error && typeof error === "object" && "stderr" in error) {
+    const e = error as { stderr?: Buffer | string; message?: string };
+    const stderr = e.stderr?.toString().trim();
+    if (stderr) return stderr;
+    if (e.message) return e.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+};
 
 /**
  * Parse the database name from a DATABASE_URL.
@@ -126,15 +192,17 @@ export const updateDatabaseUrlInEnvFiles = (
 export const createDatabase = (
   newName: string,
   templateName: string,
+  connection: DbConnection = {},
 ): Result<string, Error> => {
   try {
-    execSync(`createdb "${newName}" -T "${templateName}"`, {
-      stdio: "pipe",
-    });
+    execFileSync(
+      "createdb",
+      [...connectionArgs(connection), newName, "-T", templateName],
+      { stdio: "pipe", env: connectionEnv(connection) },
+    );
     return ok(newName);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = childErrorText(error);
 
     if (message.includes("already exists")) {
       return err(new Error(`Database "${newName}" already exists`));
@@ -147,35 +215,53 @@ export const createDatabase = (
       );
     }
 
-    return err(
-      new Error(`Failed to create database "${newName}": ${message}`),
-    );
+    return err(new Error(`Failed to create database "${newName}": ${message}`));
   }
 };
 
 /**
  * Drop a PostgreSQL database using `dropdb`.
  */
-export const dropDatabase = (name: string): Result<void, Error> => {
+export const dropDatabase = (
+  name: string,
+  connection: DbConnection = {},
+): Result<void, Error> => {
   try {
-    execSync(`dropdb "${name}" --if-exists`, { stdio: "pipe" });
+    execFileSync(
+      "dropdb",
+      [...connectionArgs(connection), name, "--if-exists"],
+      { stdio: "pipe", env: connectionEnv(connection) },
+    );
     return ok(undefined);
   } catch (error) {
     return err(
-      new Error(
-        `Failed to drop database "${name}": ${error instanceof Error ? error.message : String(error)}`,
-      ),
+      new Error(`Failed to drop database "${name}": ${childErrorText(error)}`),
     );
   }
 };
 
 /**
+ * Ensure the worktree has an env file carrying DATABASE_URL so a cloned
+ * database name (and the rest of main's env) is actually reachable by the
+ * delegated session. If the worktree already has one, does nothing. Otherwise
+ * copies `envFile` from the main worktree. Returns whether a file was copied.
+ */
+export const ensureWorktreeEnv = (
+  worktreePath: string,
+  mainPath: string,
+  envFile: string,
+): Result<boolean, Error> => {
+  if (findDatabaseUrl(worktreePath)) return ok(false);
+
+  const result = copyFiles(mainPath, worktreePath, [envFile]);
+  if (!result.ok) return err(result.error);
+  return ok(result.value.length > 0);
+};
+
+/**
  * Write the database name to a .wtr-db tracking file in the worktree.
  */
-export const writeWorktreeDb = (
-  worktreePath: string,
-  dbName: string,
-): void => {
+export const writeWorktreeDb = (worktreePath: string, dbName: string): void => {
   writeFileSync(join(worktreePath, WTR_DB_FILE), dbName, "utf-8");
 };
 
@@ -183,9 +269,7 @@ export const writeWorktreeDb = (
  * Read the database name from a .wtr-db tracking file in the worktree.
  * Returns undefined if the file doesn't exist.
  */
-export const readWorktreeDb = (
-  worktreePath: string,
-): string | undefined => {
+export const readWorktreeDb = (worktreePath: string): string | undefined => {
   const filePath = join(worktreePath, WTR_DB_FILE);
   if (!existsSync(filePath)) return undefined;
   return readFileSync(filePath, "utf-8").trim();
@@ -206,10 +290,7 @@ export const sanitizeBranchForDb = (branch: string): string => {
  * Derive a database name from a template DB and branch name.
  * Example: template "myapp_dev", branch "feature/auth" → "myapp_dev_wtr_feature_auth"
  */
-export const deriveDbName = (
-  templateDb: string,
-  branch: string,
-): string => {
+export const deriveDbName = (templateDb: string, branch: string): string => {
   const suffix = sanitizeBranchForDb(branch);
   return `${templateDb}_wtr_${suffix}`;
 };

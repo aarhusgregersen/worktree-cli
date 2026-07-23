@@ -5,7 +5,9 @@ import {
   createDatabase,
   deriveDbName,
   dropDatabase,
+  ensureWorktreeEnv,
   findDatabaseUrl,
+  parseConnection,
   parseDatabaseName,
   readWorktreeDb,
   updateDatabaseUrlInEnvFiles,
@@ -113,10 +115,23 @@ const cloneCommand = new Command("clone")
       newDbName = deriveDbName(templateDb, branch);
     }
 
-    s?.start(
-      `Cloning database ${pc.cyan(templateDb)} → ${pc.cyan(newDbName)}`,
-    );
-    const dbResult = createDatabase(newDbName, templateDb);
+    // Ensure the worktree has its own env file carrying DATABASE_URL before we
+    // rewrite it to point at the clone. Falls back to copying main's env file.
+    if (mainPath) {
+      const envResult = ensureWorktreeEnv(
+        worktreePath,
+        mainPath,
+        dbSource.file,
+      );
+      if (envResult.ok && envResult.value && !json) {
+        log.info(`Copied ${dbSource.file} into worktree for DATABASE_URL`);
+      }
+    }
+
+    const connection = parseConnection(dbSource.url);
+
+    s?.start(`Cloning database ${pc.cyan(templateDb)} → ${pc.cyan(newDbName)}`);
+    const dbResult = createDatabase(newDbName, templateDb, connection);
 
     if (!dbResult.ok) {
       s?.stop(pc.red("Failed"));
@@ -181,8 +196,16 @@ const dropCommand = new Command("drop")
     if (!json) intro("wtr db drop");
     const s = json ? null : spinner();
 
+    // Reach the same server the clone lives on. The worktree's DATABASE_URL
+    // already points at the clone, so its host/port/user are correct.
+    const mainResult = await getMainWorktreePath();
+    const dbSource =
+      findDatabaseUrl(worktreePath) ??
+      (mainResult.ok ? findDatabaseUrl(mainResult.value) : undefined);
+    const connection = dbSource ? parseConnection(dbSource.url) : {};
+
     s?.start(`Dropping database ${pc.cyan(dbName)}`);
-    const result = dropDatabase(dbName);
+    const result = dropDatabase(dbName, connection);
 
     if (!result.ok) {
       s?.stop(pc.red("Failed"));
