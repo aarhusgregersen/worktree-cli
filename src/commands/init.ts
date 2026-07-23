@@ -178,7 +178,7 @@ export const initCommand = new Command("init")
       );
 
       portOffset = await numberInput(
-        "Port offset between worktrees (recommended: 100):",
+        "Port offset between worktrees:",
         100,
       );
 

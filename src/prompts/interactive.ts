@@ -119,7 +119,7 @@ export const numberInput = async (
 ): Promise<number> => {
   const result = await p.text({
     message,
-    defaultValue: String(defaultValue),
+    initialValue: String(defaultValue),
     validate: (value) => {
       const num = Number.parseInt(value, 10);
       if (Number.isNaN(num) || num < 0) {
