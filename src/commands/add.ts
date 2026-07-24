@@ -183,6 +183,31 @@ export const addCommand = new Command("add")
       portOffset: 0,
     };
 
+    // When --db is requested, resolve the DATABASE_URL source and copy its env
+    // file into the worktree up front — before port bumping — so the copied
+    // file's ports get offset like any other copied env file. Resolving here
+    // also lets the clone step below reuse the same source.
+    let dbSource: { file: string; key: string; url: string } | undefined;
+    if (options.db !== undefined) {
+      dbSource =
+        findDatabaseUrl(worktreePath) ?? findDatabaseUrl(mainWorktreePath);
+      if (dbSource) {
+        const envResult = ensureWorktreeEnv(
+          worktreePath,
+          mainWorktreePath,
+          dbSource.file,
+        );
+        if (!envResult.ok) {
+          if (!json)
+            log.warning(
+              `Could not copy ${dbSource.file}: ${envResult.error.message}`,
+            );
+        } else if (envResult.value && !json) {
+          log.info(`Copied ${dbSource.file} into worktree for DATABASE_URL`);
+        }
+      }
+    }
+
     if (configExists(repoRoot) || globalConfigExists()) {
       const configResult = loadConfig(repoRoot);
       if (!configResult.ok) {
@@ -260,11 +285,9 @@ export const addCommand = new Command("add")
       );
     }
 
-    // Database cloning (--db)
+    // Database cloning (--db). The env file was already copied above, before
+    // port bumping; here we just create the clone and rewrite its URL.
     if (options.db !== undefined) {
-      const dbSource =
-        findDatabaseUrl(worktreePath) ?? findDatabaseUrl(mainWorktreePath);
-
       if (!dbSource) {
         if (!json)
           log.warning(
@@ -278,24 +301,6 @@ export const addCommand = new Command("add")
               `Could not parse database name from ${dbSource.key} — skipping database clone`,
             );
         } else {
-          // Ensure the worktree has an env file with DATABASE_URL, so the
-          // updated URL (and the rest of main's env) is reachable by the
-          // delegated session. `wtr add` only copies files listed in config;
-          // --db needs the env regardless of that config.
-          const envResult = ensureWorktreeEnv(
-            worktreePath,
-            mainWorktreePath,
-            dbSource.file,
-          );
-          if (!envResult.ok) {
-            if (!json)
-              log.warning(
-                `Could not copy ${dbSource.file}: ${envResult.error.message}`,
-              );
-          } else if (envResult.value && !json) {
-            log.info(`Copied ${dbSource.file} into worktree for DATABASE_URL`);
-          }
-
           // Determine new database name: use explicit name or derive from branch
           const newDbName =
             typeof options.db === "string"
