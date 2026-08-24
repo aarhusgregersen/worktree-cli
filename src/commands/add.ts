@@ -1,4 +1,4 @@
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { Command } from "commander";
 import pc from "picocolors";
 import {
@@ -6,6 +6,7 @@ import {
   globalConfigExists,
   loadConfig,
 } from "../config/loader.js";
+import { DEFAULT_TERMINAL_CONFIG } from "../config/schema.js";
 import { branchExists, fetchOrigin, getDefaultBranch } from "../core/branch.js";
 import {
   createDatabase,
@@ -36,6 +37,7 @@ import {
   isInsideWorktree,
   listWorktrees,
 } from "../core/worktree.js";
+import { canonicalize, resolveWorktreeRoot } from "../core/worktreeRoot.js";
 import {
   formatBranch,
   formatDim,
@@ -102,22 +104,31 @@ export const addCommand = new Command("add")
     }
     const mainWorktreePath = mainWorktreeResult.value;
 
-    // Guard: prevent creating worktrees inside non-main worktrees
+    const configResult =
+      configExists(repoRoot) || globalConfigExists()
+        ? loadConfig(repoRoot)
+        : null;
+
+    const safeBranchName = branch.replace(/\//g, "-");
+    const worktreeRoot = resolveWorktreeRoot({
+      mainWorktreePath,
+      configured: configResult?.ok ? configResult.value.worktreeDir : undefined,
+    });
+    const worktreePath = pathArg
+      ? canonicalize(pathArg)
+      : resolve(worktreeRoot.path, safeBranchName);
+
+    // Guard: nested worktrees break git and every path-based lookup here
     const listResult = await listWorktrees();
     if (listResult.ok) {
-      const enclosing = isInsideWorktree(listResult.value, process.cwd());
+      const enclosing = isInsideWorktree(listResult.value, worktreePath);
       if (enclosing) {
-        const msg = `Cannot create a worktree inside another worktree (${enclosing.path}). Run this command from the main worktree instead.`;
+        const msg = `Cannot create a worktree inside another worktree (${enclosing.path}).`;
         if (json) printJsonError(msg, ErrorCode.INSIDE_WORKTREE);
         console.error(formatError(msg));
         process.exit(1);
       }
     }
-
-    const safeBranchName = branch.replace(/\//g, "-");
-    const worktreePath = pathArg
-      ? resolve(pathArg)
-      : resolve(dirname(repoRoot), safeBranchName);
 
     const exists = await branchExists(branch);
     const shouldCreateBranch = !exists && !options.detach;
@@ -173,6 +184,7 @@ export const addCommand = new Command("add")
 
     const jsonResult: Record<string, unknown> = {
       path: worktreePath,
+      worktreeRoot,
       branch,
       branchCreated: shouldCreateBranch,
       filesCopied: [] as string[],
@@ -208,8 +220,7 @@ export const addCommand = new Command("add")
       }
     }
 
-    if (configExists(repoRoot) || globalConfigExists()) {
-      const configResult = loadConfig(repoRoot);
+    if (configResult) {
       if (!configResult.ok) {
         if (!json)
           log.warning(`Could not load config: ${configResult.error.message}`);
@@ -343,25 +354,16 @@ export const addCommand = new Command("add")
 
     if (!json) {
       const env = buildWorktreeEnv({ path: worktreePath, branch });
-      const configResult2 = loadConfig(repoRoot);
-      const terminalMode = configResult2.ok
-        ? configResult2.value.terminal.mode
-        : "window";
-
-      const autoMode = configResult2.ok
-        ? configResult2.value.terminal.autoMode
-        : false;
-
-      const terminalFocus = configResult2.ok
-        ? configResult2.value.terminal.focus
-        : false;
+      const terminal = configResult?.ok
+        ? configResult.value.terminal
+        : DEFAULT_TERMINAL_CONFIG;
 
       if (options.plan || options.planFile) {
         const planText = await resolvePlanText(options);
         const planPath = writePlanToTempFile(planText);
         const command = buildClaudeCommand({
           planPath,
-          autoMode,
+          autoMode: terminal.autoMode,
           model: options.model,
         });
         log.info(`Plan written to ${formatPath(planPath)}`);
@@ -370,8 +372,8 @@ export const addCommand = new Command("add")
           cwd: worktreePath,
           command,
           env,
-          mode: terminalMode,
-          focus: terminalFocus,
+          mode: terminal.mode,
+          focus: terminal.focus,
         });
         log.info("Opened terminal with Claude Code");
         log.info(
@@ -381,13 +383,16 @@ export const addCommand = new Command("add")
           "Do NOT continue working on the delegated task in this session.",
         );
       } else if (options.open) {
-        const command = buildClaudeCommand({ autoMode, model: options.model });
+        const command = buildClaudeCommand({
+          autoMode: terminal.autoMode,
+          model: options.model,
+        });
         openTerminalWindow({
           cwd: worktreePath,
           command,
           env,
-          mode: terminalMode,
-          focus: terminalFocus,
+          mode: terminal.mode,
+          focus: terminal.focus,
         });
         log.info("Opened terminal with Claude Code");
         log.info(

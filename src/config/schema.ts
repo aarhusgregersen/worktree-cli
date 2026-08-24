@@ -30,6 +30,9 @@ export interface TerminalConfig {
 
 export interface WtConfig {
   readonly copyFiles: readonly string[];
+  // Directory new worktrees are created in. Absolute, `~`-prefixed, or
+  // relative to the main worktree. Unset means "next to the main worktree".
+  readonly worktreeDir?: string;
   readonly portOffset: number;
   readonly portExclusions: readonly string[];
   readonly terminal: TerminalConfig;

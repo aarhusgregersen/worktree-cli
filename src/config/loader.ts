@@ -43,19 +43,21 @@ export const globalConfigExists = (): boolean => {
   return resolveGlobalConfigPath() !== null;
 };
 
-const mergeConfig = (
-  base: WtConfig,
-  override: Partial<WtConfig>,
-): WtConfig => ({
-  copyFiles: override.copyFiles ?? base.copyFiles,
-  portOffset: override.portOffset ?? base.portOffset,
-  portExclusions: override.portExclusions ?? base.portExclusions,
-  terminal: {
-    ...DEFAULT_TERMINAL_CONFIG,
-    ...base.terminal,
-    ...(override.terminal ?? {}),
-  },
-});
+const mergeConfig = (base: WtConfig, override: Partial<WtConfig>): WtConfig => {
+  const worktreeDir = override.worktreeDir ?? base.worktreeDir;
+
+  return {
+    copyFiles: override.copyFiles ?? base.copyFiles,
+    ...(worktreeDir ? { worktreeDir } : {}),
+    portOffset: override.portOffset ?? base.portOffset,
+    portExclusions: override.portExclusions ?? base.portExclusions,
+    terminal: {
+      ...DEFAULT_TERMINAL_CONFIG,
+      ...base.terminal,
+      ...(override.terminal ?? {}),
+    },
+  };
+};
 
 export const loadConfig = (repoRoot: string): Result<WtConfig, Error> => {
   // Start with defaults
