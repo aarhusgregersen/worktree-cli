@@ -46,7 +46,7 @@ wtr init --json   # JSON output
 
 ### `wtr add <branch> [path]`
 
-Create a new worktree. Automatically creates the branch if it doesn't exist, copies config files, and bumps ports.
+Create a new worktree. Automatically creates the branch if it doesn't exist, copies config files, and bumps ports. The worktree is created next to the main worktree unless a path is given or `worktreeDir` is configured — see [Worktree location](#worktree-location).
 
 ```bash
 wtr add feature/auth                    # Create worktree
@@ -238,11 +238,41 @@ Fallback configuration used when no local `.wtr.json` exists.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `copyFiles` | `[]` | File/directory patterns to copy from main worktree |
+| `worktreeDir` | _(unset)_ | Directory new worktrees are created in — see [Worktree location](#worktree-location) |
 | `portOffset` | `100` | Port increment per worktree index |
 | `portExclusions` | `[]` | Additional port variable patterns to exclude from bumping |
 | `terminal.mode` | `"window"` | `"window"` or `"tab"` — how new sessions open |
 | `terminal.autoMode` | `false` | Pass `--permission-mode auto` when launching Claude |
 | `terminal.focus` | `false` | If `true`, the new terminal window steals focus. Default keeps focus on your current app. |
+
+### Worktree location
+
+`wtr add <branch>` creates the worktree next to the main worktree by default —
+`/code/app` → `/code/<branch>`. The directory is resolved in this order:
+
+1. An explicit path argument: `wtr add feature/auth ~/somewhere/auth`
+2. `WTR_WORKTREE_DIR` environment variable
+3. `worktreeDir` in `.wtr.json` (local) or the global config
+4. Conductor: when run inside a [Conductor](https://conductor.build) workspace
+   for this repo, worktrees land next to the other workspaces
+   (`~/conductor/workspaces/<repo>/<branch>`)
+5. The main worktree's parent directory
+
+`worktreeDir` and `WTR_WORKTREE_DIR` accept absolute paths, `~/...`, or a path
+relative to the main worktree:
+
+```json
+{
+  "worktreeDir": "~/worktrees/app"
+}
+```
+
+`wtr add --json` reports the resolved directory and why it was picked as
+`worktreeRoot: { path, source }`.
+
+Conductor is detected via `CONDUCTOR_WORKSPACE_PATH`, and only used when
+`CONDUCTOR_ROOT_PATH` points at the same repository — so running `wtr` in
+another repo from a Conductor terminal still uses that repo's own layout.
 
 ### Port Bumping
 
