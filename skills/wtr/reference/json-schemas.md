@@ -1,6 +1,6 @@
 # wtr JSON Output Schemas
 
-All commands support `--json`. Errors output `{ "error": "message", "code": "ERROR_CODE" }` to stderr. The `code` field is present for well-known errors (see Error Codes below).
+All commands support `--json`. Errors output `{ "error": "message", "code": "ERROR_CODE" }` to stderr. The `code` field is present for well-known errors, including `INVALID_CONFIG`, `DATABASE_CLONE_FAILED`, and `DATABASE_DROP_FAILED`.
 
 ## Error Format
 
@@ -169,6 +169,10 @@ The `command` and `planPath` fields are only present when `--plan` or `--plan-fi
 }
 ```
 
+If dropping the database fails, removal stops with `DATABASE_DROP_FAILED` and
+the worktree remains intact. With `--force`, removal continues,
+`databaseDropped` is `false`, and `orphanedDatabase` contains the database name.
+
 ## `wtr db clone [name] --json`
 
 ```json
@@ -222,6 +226,8 @@ Does NOT open a terminal. Returns what would run:
 ```
 
 The `command` field is `null` if no `--claude` or `--plan` flag was given.
+When Claude is requested, the command includes the configured
+`terminal.autoMode` and requested model exactly as interactive mode would.
 
 ## `wtr diff <id> --json`
 
@@ -289,7 +295,9 @@ When a PR already exists, `existed` is `true` and `pushed` is `false`.
     {
       "path": "/path/to/worktree",
       "branch": "feature/done",
-      "branchDeleted": true
+      "branchDeleted": true,
+      "database": "myapp_dev_wtr_feature_done",
+      "databaseDropped": true
     }
   ],
   "skipped": [
@@ -298,7 +306,8 @@ When a PR already exists, `existed` is `true` and `pushed` is `false`.
       "branch": "feature/wip",
       "reason": "uncommitted changes"
     }
-  ]
+  ],
+  "failed": []
 }
 ```
 
@@ -306,6 +315,8 @@ When a PR already exists, `existed` is `true` and `pushed` is `false`.
 - `candidates` / `removed` / `skipped` — merged-branch phase. Populated unless scoped with `--dangling`.
 - `reason` for a candidate is `"branch merged"` or `"PR merged"`.
 - With `--dry-run`, `removed` is always empty and `pruned` lists what *would* be pruned.
+- `failed` contains per-phase failures. A removal entry includes `phase: "remove"`, worktree identity, error/code, and database name when applicable. Prune failures use `phase: "prune"`.
+- Database cleanup is fail-safe unless `--force` is supplied.
 
 ## `wtr init --json`
 

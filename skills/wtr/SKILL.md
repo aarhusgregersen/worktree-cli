@@ -69,7 +69,7 @@ All `--json` error output now includes a machine-readable `code` field:
 { "error": "Worktree not found: foo", "code": "WORKTREE_NOT_FOUND" }
 ```
 
-**Codes:** `NOT_GIT_REPOSITORY`, `NOT_INITIALIZED`, `WORKTREE_NOT_FOUND`, `BRANCH_EXISTS`, `BRANCH_NOT_FOUND`, `CANNOT_REMOVE_MAIN`, `WORKTREE_LOCKED`, `GH_NOT_AVAILABLE`, `INSIDE_WORKTREE`, `NOT_INSIDE_WORKTREE`, `EXEC_FAILED`, `SYNC_FAILED`, `IDENTIFIER_REQUIRED`.
+**Codes:** `NOT_GIT_REPOSITORY`, `NOT_INITIALIZED`, `WORKTREE_NOT_FOUND`, `BRANCH_EXISTS`, `BRANCH_NOT_FOUND`, `CANNOT_REMOVE_MAIN`, `WORKTREE_LOCKED`, `GH_NOT_AVAILABLE`, `INSIDE_WORKTREE`, `NOT_INSIDE_WORKTREE`, `EXEC_FAILED`, `SYNC_FAILED`, `IDENTIFIER_REQUIRED`, `INVALID_CONFIG`, `DATABASE_CLONE_FAILED`, `DATABASE_DROP_FAILED`.
 
 ## Common Workflows
 
@@ -232,6 +232,10 @@ wtr add feature/auth --db my_custom_db --open
 ```
 
 This runs `createdb <new> -T <template>` using the database found in `DATABASE_URL` from the worktree's `.env` files, then updates `DATABASE_URL` to point at the clone. On `wtr remove`, the cloned database is automatically dropped.
+
+Database cleanup is fail-safe: if the database cannot be dropped, the worktree
+and `.wtr-db` marker are preserved. `--force` explicitly permits removal and
+reports the resulting orphan database. `wtr clean` uses the same lifecycle.
 
 You can also add database isolation after the fact, from inside an existing worktree:
 

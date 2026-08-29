@@ -43,7 +43,8 @@
     "@clack/prompts": "^0.11.0",
     "cli-table3": "^0.6.5",
     "commander": "^14.0.0",
-    "picocolors": "^1.1.0"
+    "picocolors": "^1.1.0",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

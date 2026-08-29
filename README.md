@@ -194,6 +194,9 @@ wtr clean --force -y          # Include dirty worktrees, skip confirmation
 ```
 
 Worktrees with uncommitted changes are skipped unless `--force` is given.
+If a worktree has a managed database, cleanup drops it before removing the
+worktree. A failed database drop preserves the worktree and its tracking file;
+`--force` explicitly permits removal and reports the orphaned database.
 
 ### `wtr completions [shell]`
 
@@ -244,6 +247,10 @@ Fallback configuration used when no local `.wtr.json` exists.
 | `terminal.mode` | `"window"` | `"window"` or `"tab"` — how new sessions open |
 | `terminal.autoMode` | `false` | Pass `--permission-mode auto` when launching Claude |
 | `terminal.focus` | `false` | If `true`, the new terminal window steals focus. Default keeps focus on your current app. |
+
+Configuration is validated strictly at runtime. Unknown keys, invalid types,
+negative/non-integer port offsets, empty `worktreeDir` values, and unsupported
+terminal modes fail with `INVALID_CONFIG` and include the offending field path.
 
 ### Worktree location
 
@@ -302,7 +309,11 @@ All commands support `--json` for structured output. Errors include machine-read
 }
 ```
 
-**Error codes:** `NOT_GIT_REPOSITORY`, `NOT_INITIALIZED`, `WORKTREE_NOT_FOUND`, `BRANCH_EXISTS`, `BRANCH_NOT_FOUND`, `CANNOT_REMOVE_MAIN`, `WORKTREE_LOCKED`, `GH_NOT_AVAILABLE`, `INSIDE_WORKTREE`, `NOT_INSIDE_WORKTREE`, `EXEC_FAILED`, `SYNC_FAILED`, `IDENTIFIER_REQUIRED`.
+**Error codes:** `NOT_GIT_REPOSITORY`, `NOT_INITIALIZED`, `WORKTREE_NOT_FOUND`, `BRANCH_EXISTS`, `BRANCH_NOT_FOUND`, `CANNOT_REMOVE_MAIN`, `WORKTREE_LOCKED`, `GH_NOT_AVAILABLE`, `INSIDE_WORKTREE`, `NOT_INSIDE_WORKTREE`, `EXEC_FAILED`, `SYNC_FAILED`, `IDENTIFIER_REQUIRED`, `INVALID_CONFIG`, `DATABASE_CLONE_FAILED`, `DATABASE_DROP_FAILED`.
+
+`wtr open --json` and `wtr add --json --open/--plan` do not open a terminal.
+Their reported Claude command is built from the same launch specification as
+interactive mode, including `terminal.autoMode` and the selected model.
 
 ## Claude Code Integration
 

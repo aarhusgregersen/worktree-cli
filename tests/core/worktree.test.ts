@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   findWorktree,
   isInsideWorktree,
+  parsePruneOutput,
   parseWorktreeEntry,
   parseWorktreeOutput,
-  parsePruneOutput,
 } from "../../src/core/worktree.js";
 
 describe("parseWorktreeOutput", () => {

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { fail, runCliAction } from "../cliRuntime.js";
 
 const BASH_COMPLETIONS = `#!/bin/bash
 # wtr bash completions
@@ -150,27 +151,31 @@ complete -c wtr -l no-color -d "Disable colored output"
 complete -c wtr -l json -d "Output as JSON"
 complete -c wtr -l help -d "Show help"`;
 
-export const completionsCommand = new Command("completions")
-  .description("Generate shell completions")
-  .argument("[shell]", "Shell type (bash, zsh, fish)")
-  .action((shell: string | undefined) => {
-    const detected = shell ?? detectShell();
-
-    switch (detected) {
-      case "bash":
-        console.log(BASH_COMPLETIONS);
-        break;
-      case "zsh":
-        console.log(ZSH_COMPLETIONS);
-        break;
-      case "fish":
-        console.log(FISH_COMPLETIONS);
-        break;
-      default:
-        console.error(`Unknown shell: ${detected}. Supported: bash, zsh, fish`);
-        process.exit(1);
-    }
-  });
+export const createCompletionsCommand = (): Command =>
+  new Command("completions")
+    .description("Generate shell completions")
+    .argument("[shell]", "Shell type (bash, zsh, fish)")
+    .action(async (shell: string | undefined) => {
+      await runCliAction({
+        json: false,
+        action: () => {
+          const detected = shell ?? detectShell();
+          switch (detected) {
+            case "bash":
+              return BASH_COMPLETIONS;
+            case "zsh":
+              return ZSH_COMPLETIONS;
+            case "fish":
+              return FISH_COMPLETIONS;
+            default:
+              return fail(
+                `Unknown shell: ${detected}. Supported: bash, zsh, fish`,
+              );
+          }
+        },
+        renderHuman: (completion) => console.log(completion),
+      });
+    });
 
 const detectShell = (): string => {
   const shell = process.env.SHELL ?? "";

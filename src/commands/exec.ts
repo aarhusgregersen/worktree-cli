@@ -1,75 +1,64 @@
 import { spawnSync } from "node:child_process";
 import { Command } from "commander";
+import { fail, runCliAction } from "../cliRuntime.js";
 import { ErrorCode } from "../core/errors.js";
-import { isGitRepository } from "../core/git.js";
 import { buildWorktreeEnv } from "../core/terminal.js";
-import { findWorktree, listWorktrees } from "../core/worktree.js";
-import { formatError } from "../output/formatter.js";
-import { printJson, printJsonError } from "../output/json.js";
+import {
+  requireGitRepository,
+  requireWorktrees,
+  resolveWorktreeTarget,
+} from "./shared.js";
 
-export const execCommand = new Command("exec")
-  .description("Run a command in a worktree directory")
-  .argument("<id>", "Worktree identifier (branch, path, or # from `wtr ls`)")
-  .argument("<cmd...>", "Command to run")
-  .option("--json", "Output as JSON (captures stdout/stderr)")
-  .allowUnknownOption(true)
-  .action(async (identifier: string, cmd: string[], options) => {
-    const json = options.json ?? false;
+interface ExecResult {
+  readonly path: string;
+  readonly branch: string | undefined;
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
 
-    if (!isGitRepository()) {
-      if (json)
-        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
-      console.error(formatError("Not a git repository"));
-      process.exit(1);
-    }
-
-    const listResult = await listWorktrees();
-    if (!listResult.ok) {
-      if (json) printJsonError(listResult.error.message);
-      console.error(formatError(listResult.error.message));
-      process.exit(1);
-    }
-
-    const worktree = findWorktree(listResult.value, identifier);
-    if (!worktree) {
-      if (json)
-        printJsonError(
-          `Worktree not found: ${identifier}`,
-          ErrorCode.WORKTREE_NOT_FOUND,
-        );
-      console.error(formatError(`Worktree not found: ${identifier}`));
-      process.exit(1);
-    }
-
-    const wtEnv = buildWorktreeEnv({
-      path: worktree.path,
-      branch: worktree.branch,
-    });
-
-    const env = { ...process.env, ...wtEnv };
-
-    if (json) {
-      const result = spawnSync(cmd[0] as string, cmd.slice(1), {
-        cwd: worktree.path,
-        env,
-        encoding: "utf-8",
+export const createExecCommand = (): Command =>
+  new Command("exec")
+    .description("Run a command in a worktree directory")
+    .argument("<id>", "Worktree identifier (branch, path, or # from `wtr ls`)")
+    .argument("<cmd...>", "Command to run")
+    .option("--json", "Output as JSON (captures stdout/stderr)")
+    .allowUnknownOption(true)
+    .action(async (identifier: string, command: string[], options) => {
+      await runCliAction<ExecResult>({
+        json: options.json ?? false,
+        action: async (reporter) => {
+          requireGitRepository();
+          const worktree = await resolveWorktreeTarget({
+            worktrees: await requireWorktrees(),
+            identifier,
+            reporter,
+          });
+          const [executable, ...args] = command;
+          if (!executable) {
+            return fail("Command is required", { code: ErrorCode.EXEC_FAILED });
+          }
+          const result = spawnSync(executable, args, {
+            cwd: worktree.path,
+            env: {
+              ...process.env,
+              ...buildWorktreeEnv({
+                path: worktree.path,
+                branch: worktree.branch,
+              }),
+            },
+            ...(reporter.interactive
+              ? { stdio: "inherit" as const }
+              : { encoding: "utf-8" as const }),
+          });
+          return {
+            path: worktree.path,
+            branch: worktree.branch,
+            exitCode: result.status ?? 1,
+            stdout: typeof result.stdout === "string" ? result.stdout : "",
+            stderr: typeof result.stderr === "string" ? result.stderr : "",
+          };
+        },
+        exitCode: (result) => result.exitCode,
       });
-
-      printJson({
-        path: worktree.path,
-        branch: worktree.branch,
-        exitCode: result.status ?? 1,
-        stdout: result.stdout ?? "",
-        stderr: result.stderr ?? "",
-      });
-      process.exit(result.status ?? 1);
-    }
-
-    const result = spawnSync(cmd[0] as string, cmd.slice(1), {
-      cwd: worktree.path,
-      env,
-      stdio: "inherit",
     });
-
-    process.exit(result.status ?? 1);
-  });

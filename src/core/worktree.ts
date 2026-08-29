@@ -121,7 +121,9 @@ export const isInsideWorktree = (
     (wt) => !wt.isMain && (cwd === wt.path || cwd.startsWith(`${wt.path}/`)),
   );
 
-export const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => {
+export const parseWorktreeOutput = (
+  output: string,
+): readonly WorktreeInfo[] => {
   const entries = output.split("\n\n").filter(Boolean);
   let isFirst = true;
 
@@ -132,19 +134,22 @@ export const parseWorktreeOutput = (output: string): readonly WorktreeInfo[] => 
   });
 };
 
-export const parseWorktreeEntry = (entry: string, isMain: boolean): WorktreeInfo => {
+export const parseWorktreeEntry = (
+  entry: string,
+  isMain: boolean,
+): WorktreeInfo => {
   const lines = entry.split("\n");
   const data: Record<string, string | boolean> = {};
 
   for (const line of lines) {
     if (line === "locked") {
-      data["locked"] = true;
+      data.locked = true;
     } else if (line === "prunable") {
-      data["prunable"] = true;
+      data.prunable = true;
     } else if (line === "detached") {
-      data["detached"] = true;
+      data.detached = true;
     } else if (line === "bare") {
-      data["bare"] = true;
+      data.bare = true;
     } else {
       const spaceIndex = line.indexOf(" ");
       if (spaceIndex !== -1) {
@@ -156,18 +161,18 @@ export const parseWorktreeEntry = (entry: string, isMain: boolean): WorktreeInfo
   }
 
   const branch =
-    typeof data["branch"] === "string"
-      ? data["branch"].replace("refs/heads/", "")
+    typeof data.branch === "string"
+      ? data.branch.replace("refs/heads/", "")
       : undefined;
 
   return {
-    path: typeof data["worktree"] === "string" ? data["worktree"] : "",
-    head: typeof data["HEAD"] === "string" ? data["HEAD"] : "",
+    path: typeof data.worktree === "string" ? data.worktree : "",
+    head: typeof data.HEAD === "string" ? data.HEAD : "",
     branch,
-    isLocked: data["locked"] === true,
-    isPrunable: data["prunable"] === true,
+    isLocked: data.locked === true,
+    isPrunable: data.prunable === true,
     isMain,
-    isDetached: data["detached"] === true,
+    isDetached: data.detached === true,
   };
 };
 
