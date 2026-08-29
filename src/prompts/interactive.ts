@@ -1,5 +1,6 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
+import { CliCancelled, CliError } from "../core/errors.js";
 import type { WorktreeInfo } from "../core/worktree.js";
 
 export const selectWorktree = async (
@@ -9,7 +10,7 @@ export const selectWorktree = async (
 
   if (nonMain.length === 0) {
     p.cancel("No worktrees found.");
-    process.exit(1);
+    throw new CliError("No worktrees found.");
   }
 
   const result = await p.select({
@@ -23,10 +24,10 @@ export const selectWorktree = async (
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
-  return result as WorktreeInfo;
+  return result;
 };
 
 export const confirmDestructive = async (
@@ -46,7 +47,7 @@ export const confirmDestructive = async (
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
   return result;
@@ -63,7 +64,7 @@ export const confirm = async (
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
   return result;
@@ -71,23 +72,22 @@ export const confirm = async (
 
 export const selectMultiple = async <T extends string>(
   message: string,
-  options: { value: T; label: string; hint?: string }[],
+  options: p.Option<T>[],
   initialValues?: T[],
 ): Promise<T[]> => {
   const result = await p.multiselect({
     message,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options: options as any,
+    options,
     initialValues,
     required: false,
   });
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
-  return result as T[];
+  return result;
 };
 
 export const textInput = async (
@@ -107,7 +107,7 @@ export const textInput = async (
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
   return result;
@@ -130,7 +130,7 @@ export const numberInput = async (
 
   if (p.isCancel(result)) {
     p.cancel("Operation cancelled.");
-    process.exit(0);
+    throw new CliCancelled();
   }
 
   return Number.parseInt(result, 10);

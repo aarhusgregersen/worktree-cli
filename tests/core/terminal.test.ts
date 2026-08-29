@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildClaudeCommand,
   buildWorktreeEnv,
+  detectTerminal,
 } from "../../src/core/terminal.js";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("buildWorktreeEnv", () => {
   it("creates env vars from path and branch", () => {
@@ -47,11 +50,16 @@ describe("buildClaudeCommand", () => {
   });
 
   it("returns auto mode command when autoMode is true", () => {
-    expect(buildClaudeCommand({ autoMode: true })).toBe("claude --permission-mode auto");
+    expect(buildClaudeCommand({ autoMode: true })).toBe(
+      "claude --permission-mode auto",
+    );
   });
 
   it("returns auto mode command with plan when autoMode is true", () => {
-    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: true });
+    const cmd = buildClaudeCommand({
+      planPath: "/tmp/plan.md",
+      autoMode: true,
+    });
     expect(cmd).toBe(`claude --permission-mode auto "$(cat '/tmp/plan.md')"`);
   });
 
@@ -60,7 +68,10 @@ describe("buildClaudeCommand", () => {
   });
 
   it("returns command with plan but no auto mode when autoMode is false", () => {
-    const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", autoMode: false });
+    const cmd = buildClaudeCommand({
+      planPath: "/tmp/plan.md",
+      autoMode: false,
+    });
     expect(cmd).toBe(`claude "$(cat '/tmp/plan.md')"`);
   });
 
@@ -76,5 +87,19 @@ describe("buildClaudeCommand", () => {
   it("combines model flag with plan", () => {
     const cmd = buildClaudeCommand({ planPath: "/tmp/plan.md", model: "opus" });
     expect(cmd).toBe(`claude --model 'opus' "$(cat '/tmp/plan.md')"`);
+  });
+});
+
+describe("detectTerminal", () => {
+  it.each([
+    ["iTerm.app", "iterm2"],
+    ["Apple_Terminal", "apple_terminal"],
+    ["ghostty", "ghostty"],
+    ["WarpTerminal", "warp"],
+    ["unknown-terminal", "generic"],
+  ] as const)("maps %s to the typed %s backend", (program, kind) => {
+    vi.stubEnv("CMUX_SOCKET_PATH", "/path/that/does/not/exist");
+    vi.stubEnv("TERM_PROGRAM", program);
+    expect(detectTerminal()).toEqual({ kind, program });
   });
 });

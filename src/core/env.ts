@@ -1,13 +1,12 @@
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { isExcludedPort } from "../config/schema.js";
 import { type Result, err, ok } from "../utils/result.js";
+import {
+  parseEnvAssignment,
+  readEnvFiles,
+  rewriteEnvFiles,
+} from "./envDocument.js";
 
 interface PortBumpResult {
   readonly file: string;
@@ -37,18 +36,14 @@ export const copyFiles = (
     const relToSource = relative(sourceRoot, sourcePath);
     if (relToSource.startsWith("..") || isAbsolute(relToSource)) {
       return err(
-        new Error(
-          `Refusing to copy "${pattern}": path escapes source root`,
-        ),
+        new Error(`Refusing to copy "${pattern}": path escapes source root`),
       );
     }
 
     const relToTarget = relative(targetRoot, targetPath);
     if (relToTarget.startsWith("..") || isAbsolute(relToTarget)) {
       return err(
-        new Error(
-          `Refusing to copy "${pattern}": path escapes target root`,
-        ),
+        new Error(`Refusing to copy "${pattern}": path escapes target root`),
       );
     }
 
@@ -82,36 +77,34 @@ export const bumpPortsInEnvFiles = (
   exclusions: readonly string[],
 ): Result<PortBumpResult[], Error> => {
   const results: PortBumpResult[] = [];
-  const envFiles = findEnvFiles(targetRoot);
+  const changesByFile = new Map<string, PortBumpResult["changes"]>();
 
-  for (const file of envFiles) {
-    const result = bumpPortsInFile(file, offset, exclusions);
-    if (!result.ok) return result;
-    if (result.value.changes.length > 0) {
-      results.push(result.value);
-    }
+  for (const file of readEnvFiles(targetRoot)) {
+    const lines = file.content.split(/\r?\n/);
+    const result = transformPortLines(lines, offset, exclusions);
+    if (result.changes.length === 0) continue;
+    changesByFile.set(file.name, result.changes);
+    results.push({ file: file.name, changes: result.changes });
   }
+
+  const rewrite = rewriteEnvFiles(targetRoot, (assignment, file) => {
+    const change = changesByFile
+      .get(file.name)
+      ?.find(
+        (candidate) =>
+          candidate.key === assignment.key &&
+          (assignment.value === String(candidate.oldPort) ||
+            assignment.value.includes(`:${candidate.oldPort}`)),
+      );
+    if (!change) return undefined;
+    return assignment.value.replace(
+      String(change.oldPort),
+      String(change.newPort),
+    );
+  });
+  if (!rewrite.ok) return rewrite;
 
   return ok(results);
-};
-
-const findEnvFiles = (dir: string): string[] => {
-  const files: string[] = [];
-  const envPatterns = [
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.development.local",
-  ];
-
-  for (const pattern of envPatterns) {
-    const filePath = join(dir, pattern);
-    if (existsSync(filePath)) {
-      files.push(filePath);
-    }
-  }
-
-  return files;
 };
 
 export const transformPortLines = (
@@ -126,14 +119,14 @@ export const transformPortLines = (
   const newLines: string[] = [];
 
   for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith("#")) {
+    const assignment = parseEnvAssignment(line);
+    if (!assignment) {
       newLines.push(line);
       continue;
     }
 
-    const portMatch = trimmed.match(PORT_PATTERN);
+    const normalized = `${assignment.key}=${assignment.value}`;
+    const portMatch = normalized.match(PORT_PATTERN);
     if (portMatch) {
       const key = portMatch[1];
       const portStr = portMatch[2];
@@ -142,12 +135,12 @@ export const transformPortLines = (
         const oldPort = Number.parseInt(portStr, 10);
         const newPort = oldPort + offset;
         changes.push({ key, oldPort, newPort });
-        newLines.push(line.replace(`=${portStr}`, `=${newPort}`));
+        newLines.push(assignment.render(String(newPort)));
         continue;
       }
     }
 
-    const urlMatch = trimmed.match(URL_PORT_PATTERN);
+    const urlMatch = normalized.match(URL_PORT_PATTERN);
     if (urlMatch) {
       const key = urlMatch[1];
       const portStr = urlMatch[3];
@@ -156,7 +149,11 @@ export const transformPortLines = (
         const oldPort = Number.parseInt(portStr, 10);
         const newPort = oldPort + offset;
         changes.push({ key, oldPort, newPort });
-        newLines.push(line.replace(`:${portStr}`, `:${newPort}`));
+        newLines.push(
+          assignment.render(
+            assignment.value.replace(`:${portStr}`, `:${newPort}`),
+          ),
+        );
         continue;
       }
     }
@@ -165,31 +162,4 @@ export const transformPortLines = (
   }
 
   return { newLines, changes };
-};
-
-const bumpPortsInFile = (
-  filePath: string,
-  offset: number,
-  exclusions: readonly string[],
-): Result<PortBumpResult, Error> => {
-  try {
-    const content = readFileSync(filePath, "utf-8");
-    const lines = content.split("\n");
-    const { newLines, changes } = transformPortLines(lines, offset, exclusions);
-
-    if (changes.length > 0) {
-      writeFileSync(filePath, newLines.join("\n"));
-    }
-
-    return ok({
-      file: basename(filePath),
-      changes,
-    });
-  } catch (error) {
-    return err(
-      new Error(
-        `Failed to process ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-      ),
-    );
-  }
 };

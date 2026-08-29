@@ -1,181 +1,104 @@
 import { Command } from "commander";
+import { fail, runCliAction, unwrapCli } from "../cliRuntime.js";
 import { getDefaultBranch } from "../core/branch.js";
-import { ErrorCode } from "../core/errors.js";
-import { executeGitCommand, isGitRepository } from "../core/git.js";
+import { executeGitCommand } from "../core/git.js";
 import {
-  type WorktreeInfo,
-  findWorktree,
-  listWorktrees,
-} from "../core/worktree.js";
-import { formatError } from "../output/formatter.js";
-import { printJson, printJsonError } from "../output/json.js";
-import { selectWorktree } from "../prompts/interactive.js";
+  requireGitRepository,
+  requireWorktrees,
+  resolveWorktreeTarget,
+} from "./shared.js";
 
-export const diffCommand = new Command("diff")
-  .description("Show diff for a worktree against its base branch")
-  .argument(
-    "[worktree]",
-    "Worktree identifier (branch, path, or # from `wtr ls`)",
-  )
-  .option("--stat", "Show diffstat summary only")
-  .option("--uncommitted", "Show uncommitted changes instead of branch diff")
-  .option(
-    "--base <branch>",
-    "Base branch to diff against (default: auto-detected)",
-  )
-  .option("--json", "Output as JSON")
-  .action(async (identifier: string | undefined, options) => {
-    const json = options.json ?? false;
+interface ParsedStat {
+  readonly filesChanged: number;
+  readonly insertions: number;
+  readonly deletions: number;
+  readonly files: readonly string[];
+}
 
-    if (!isGitRepository()) {
-      if (json)
-        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
-      console.error(formatError("Not a git repository"));
-      process.exit(1);
-    }
+interface DiffOutcome {
+  readonly baseBranch: string;
+  readonly branch: string | undefined;
+  readonly path: string;
+  readonly uncommitted?: true;
+  readonly diff?: string;
+  readonly stat?: ParsedStat;
+  readonly raw: string;
+}
 
-    const listResult = await listWorktrees();
-    if (!listResult.ok) {
-      if (json) printJsonError(listResult.error.message);
-      console.error(formatError(listResult.error.message));
-      process.exit(1);
-    }
-
-    let worktree: WorktreeInfo | undefined;
-    if (!identifier) {
-      if (json) {
-        printJsonError(
-          "Worktree identifier required in --json mode",
-          ErrorCode.IDENTIFIER_REQUIRED,
-        );
-        process.exit(1);
-      }
-      worktree = await selectWorktree(listResult.value);
-    } else {
-      worktree = findWorktree(listResult.value, identifier);
-      if (!worktree) {
-        if (json)
-          printJsonError(
-            `Worktree not found: ${identifier}`,
-            ErrorCode.WORKTREE_NOT_FOUND,
-          );
-        console.error(formatError(`Worktree not found: ${identifier}`));
-        process.exit(1);
-      }
-    }
-
-    const baseBranch = options.base ?? (await getDefaultBranch());
-
-    if (options.uncommitted) {
-      // Show working tree changes within the worktree
-      const args = ["diff", "HEAD"];
-      if (options.stat) args.push("--stat");
-
-      const result = await executeGitCommand(args, { cwd: worktree.path });
-      if (!result.ok) {
-        if (json) printJsonError(result.error.message);
-        console.error(formatError(result.error.message));
-        process.exit(1);
-      }
-
-      if (json) {
-        if (options.stat) {
-          const stat = parseStatOutput(result.value.stdout);
-          printJson({
-            baseBranch: "HEAD",
+export const createDiffCommand = (): Command =>
+  new Command("diff")
+    .description("Show diff for a worktree against its base branch")
+    .argument(
+      "[worktree]",
+      "Worktree identifier (branch, path, or # from `wtr ls`)",
+    )
+    .option("--stat", "Show diffstat summary only")
+    .option("--uncommitted", "Show uncommitted changes instead of branch diff")
+    .option(
+      "--base <branch>",
+      "Base branch to diff against (default: auto-detected)",
+    )
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string | undefined, options) => {
+      await runCliAction<DiffOutcome>({
+        json: options.json ?? false,
+        action: async (reporter) => {
+          requireGitRepository();
+          const worktree = await resolveWorktreeTarget({
+            worktrees: await requireWorktrees(),
+            identifier,
+            reporter,
+          });
+          const uncommitted = options.uncommitted ?? false;
+          if (!uncommitted && !worktree.branch) {
+            return fail(
+              "Cannot diff a detached worktree without --uncommitted",
+            );
+          }
+          const baseBranch = uncommitted
+            ? "HEAD"
+            : (options.base ?? (await getDefaultBranch()));
+          const args = uncommitted
+            ? ["diff", "HEAD"]
+            : ["diff", `origin/${baseBranch}...${worktree.branch}`];
+          if (options.stat) args.push("--stat");
+          const raw = unwrapCli(
+            await executeGitCommand(args, { cwd: worktree.path }),
+          ).stdout;
+          return {
+            baseBranch,
             branch: worktree.branch,
             path: worktree.path,
-            uncommitted: true,
-            stat,
-          });
-        } else {
-          printJson({
-            baseBranch: "HEAD",
-            branch: worktree.branch,
-            path: worktree.path,
-            uncommitted: true,
-            diff: result.value.stdout,
-          });
-        }
-      } else {
-        process.stdout.write(result.value.stdout);
-      }
-      return;
-    }
+            ...(uncommitted ? { uncommitted: true as const } : {}),
+            ...(options.stat ? { stat: parseStatOutput(raw) } : { diff: raw }),
+            raw,
+          };
+        },
+        renderJson: ({ raw: _, ...result }) => result,
+        renderHuman: ({ raw }) => process.stdout.write(raw),
+      });
+    });
 
-    // Committed changes vs base branch
-    if (!worktree.branch) {
-      if (json)
-        printJsonError("Cannot diff a detached worktree without --uncommitted");
-      console.error(
-        formatError("Cannot diff a detached worktree without --uncommitted"),
-      );
-      process.exit(1);
-    }
-
-    const args = ["diff", `origin/${baseBranch}...${worktree.branch}`];
-    if (options.stat) args.push("--stat");
-
-    const result = await executeGitCommand(args, { cwd: worktree.path });
-    if (!result.ok) {
-      if (json) printJsonError(result.error.message);
-      console.error(formatError(result.error.message));
-      process.exit(1);
-    }
-
-    if (json) {
-      if (options.stat) {
-        const stat = parseStatOutput(result.value.stdout);
-        printJson({
-          baseBranch,
-          branch: worktree.branch,
-          path: worktree.path,
-          stat,
-        });
-      } else {
-        printJson({
-          baseBranch,
-          branch: worktree.branch,
-          path: worktree.path,
-          diff: result.value.stdout,
-        });
-      }
-    } else {
-      process.stdout.write(result.value.stdout);
-    }
-  });
-
-const parseStatOutput = (
-  output: string,
-): {
-  filesChanged: number;
-  insertions: number;
-  deletions: number;
-  files: string[];
-} => {
+export const parseStatOutput = (output: string): ParsedStat => {
   const lines = output.trim().split("\n");
-  const files: string[] = [];
-
-  // All lines except the last summary line are file entries
-  for (const line of lines.slice(0, -1)) {
+  const files = lines.slice(0, -1).flatMap((line) => {
     const match = line.match(/^\s*(.+?)\s+\|/);
-    if (match?.[1]) files.push(match[1].trim());
-  }
-
-  // Parse summary line: " 3 files changed, 10 insertions(+), 5 deletions(-)"
-  const summaryLine = lines[lines.length - 1] ?? "";
-  const filesChanged = Number.parseInt(
-    summaryLine.match(/(\d+) files? changed/)?.[1] ?? "0",
-    10,
-  );
-  const insertions = Number.parseInt(
-    summaryLine.match(/(\d+) insertions?\(\+\)/)?.[1] ?? "0",
-    10,
-  );
-  const deletions = Number.parseInt(
-    summaryLine.match(/(\d+) deletions?\(-\)/)?.[1] ?? "0",
-    10,
-  );
-
-  return { filesChanged, insertions, deletions, files };
+    return match?.[1] ? [match[1].trim()] : [];
+  });
+  const summary = lines.at(-1) ?? "";
+  return {
+    filesChanged: Number.parseInt(
+      summary.match(/(\d+) files? changed/)?.[1] ?? "0",
+      10,
+    ),
+    insertions: Number.parseInt(
+      summary.match(/(\d+) insertions?\(\+\)/)?.[1] ?? "0",
+      10,
+    ),
+    deletions: Number.parseInt(
+      summary.match(/(\d+) deletions?\(-\)/)?.[1] ?? "0",
+      10,
+    ),
+    files,
+  };
 };

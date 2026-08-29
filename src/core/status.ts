@@ -97,9 +97,7 @@ export const getClaudeCwds = async (): Promise<readonly string[]> => {
             pid,
             "-Fn",
           ]);
-          const cwdLine = lsofOut
-            .split("\n")
-            .find((l) => l.startsWith("n/"));
+          const cwdLine = lsofOut.split("\n").find((l) => l.startsWith("n/"));
           return cwdLine ? cwdLine.substring(1) : null;
         } catch {
           return null;

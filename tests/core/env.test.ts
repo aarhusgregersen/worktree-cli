@@ -62,20 +62,17 @@ describe("transformPortLines", () => {
     expect(result.changes).toHaveLength(2);
   });
 
-  it("handles quoted values (detected but replace uses unquoted pattern)", () => {
-    // The regex detects the port inside quotes, but the replace pattern
-    // `=<port>` doesn't match `="<port>"` — so the line is unchanged.
-    // This tests actual behavior; env files rarely quote port numbers.
+  it("bumps quoted values while preserving double quotes", () => {
     const lines = ['APP_PORT="3000"'];
     const result = transformPortLines(lines, 100, []);
-    expect(result.newLines).toEqual(['APP_PORT="3000"']);
+    expect(result.newLines).toEqual(['APP_PORT="3100"']);
     expect(result.changes).toHaveLength(1);
   });
 
-  it("handles single-quoted values (same limitation as double quotes)", () => {
+  it("bumps quoted values while preserving single quotes", () => {
     const lines = ["APP_PORT='3000'"];
     const result = transformPortLines(lines, 100, []);
-    expect(result.newLines).toEqual(["APP_PORT='3000'"]);
+    expect(result.newLines).toEqual(["APP_PORT='3100'"]);
     expect(result.changes).toHaveLength(1);
   });
 

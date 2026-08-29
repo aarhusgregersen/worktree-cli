@@ -1,242 +1,116 @@
 import { Command } from "commander";
 import pc from "picocolors";
+import { runCliAction } from "../cliRuntime.js";
 import {
   deleteBranch,
   getCommitsAhead,
   getDefaultBranch,
   isBranchMerged,
 } from "../core/branch.js";
+import { CliCancelled, CliError, ErrorCode } from "../core/errors.js";
+import { removeManagedWorktree } from "../core/lifecycle.js";
+import { formatBranch, formatPath } from "../output/formatter.js";
+import { confirmDestructive } from "../prompts/interactive.js";
 import {
-  dropDatabase,
-  findDatabaseUrl,
-  parseConnection,
-  readWorktreeDb,
-} from "../core/database.js";
-import { ErrorCode } from "../core/errors.js";
-import { getMainWorktreePath, isGitRepository } from "../core/git.js";
-import {
-  type WorktreeInfo,
-  findWorktree,
-  listWorktrees,
-  removeWorktree,
-} from "../core/worktree.js";
-import {
-  formatBranch,
-  formatError,
-  formatPath,
-  formatWarning,
-} from "../output/formatter.js";
-import { printJson, printJsonError } from "../output/json.js";
-import {
-  confirmDestructive,
-  intro,
-  log,
-  outro,
-  selectWorktree,
-  spinner,
-} from "../prompts/interactive.js";
+  requireGitRepository,
+  requireWorktrees,
+  resolveWorktreeTarget,
+} from "./shared.js";
 
-export const removeCommand = new Command("remove")
-  .alias("rm")
-  .description("Remove a worktree")
-  .argument("[path-or-id]", "Worktree path, directory name, or # from `wtr ls`")
-  .option("-f, --force", "Force removal even with uncommitted changes")
-  .option("--delete-branch", "Also delete the associated branch")
-  .option("-y, --yes", "Skip confirmation prompt")
-  .option("--json", "Output as JSON")
-  .action(async (pathArg: string | undefined, options) => {
-    const json = options.json ?? false;
+export const createRemoveCommand = (): Command =>
+  new Command("remove")
+    .alias("rm")
+    .description("Remove a worktree")
+    .argument(
+      "[path-or-id]",
+      "Worktree path, directory name, or # from `wtr ls`",
+    )
+    .option("-f, --force", "Force removal even with uncommitted changes")
+    .option("--delete-branch", "Also delete the associated branch")
+    .option("-y, --yes", "Skip confirmation prompt")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string | undefined, options) => {
+      await runCliAction({
+        json: options.json ?? false,
+        action: async (reporter) => {
+          requireGitRepository();
+          const worktree = await resolveWorktreeTarget({
+            worktrees: await requireWorktrees(),
+            identifier,
+            reporter,
+          });
+          if (worktree.isMain) {
+            throw new CliError("Cannot remove the main worktree", {
+              code: ErrorCode.CANNOT_REMOVE_MAIN,
+            });
+          }
+          if (worktree.isLocked && !options.force) {
+            throw new CliError("Worktree is locked. Use --force to remove.", {
+              code: ErrorCode.WORKTREE_LOCKED,
+            });
+          }
 
-    if (!isGitRepository()) {
-      if (json)
-        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
-      console.error(formatError("Not a git repository"));
-      process.exit(1);
-    }
+          reporter.intro("wtr remove");
+          if (reporter.interactive && !options.yes) {
+            const confirmed = await confirmDestructive(
+              options.deleteBranch && worktree.branch
+                ? `Remove worktree at ${formatPath(worktree.path)} and delete branch ${formatBranch(worktree.branch)}?`
+                : `Remove worktree at ${formatPath(worktree.path)}?`,
+              { initialValue: true, activeLabel: "Yes (recommended)" },
+            );
+            if (!confirmed) {
+              reporter.outro("Aborted");
+              throw new CliCancelled();
+            }
+          }
 
-    const listResult = await listWorktrees();
-    if (!listResult.ok) {
-      if (json) printJsonError(listResult.error.message);
-      console.error(formatError(listResult.error.message));
-      process.exit(1);
-    }
+          const progress = reporter.spinner();
+          progress.start(`Removing ${formatPath(worktree.path)}`);
+          const removed = await removeManagedWorktree({
+            worktree,
+            force: options.force ?? false,
+          });
+          if (!removed.ok) throw removed.error;
+          progress.stop(pc.green("Worktree removed"));
+          if (removed.value.orphanedDatabase) {
+            reporter.warning(
+              `Database ${removed.value.orphanedDatabase} could not be dropped and is now orphaned.`,
+            );
+          }
 
-    let worktree: WorktreeInfo | undefined;
-    if (!pathArg) {
-      if (json) {
-        printJsonError(
-          "Worktree identifier required in --json mode",
-          ErrorCode.IDENTIFIER_REQUIRED,
-        );
-        process.exit(1);
-      }
-      worktree = await selectWorktree(listResult.value);
-    } else {
-      worktree = findWorktree(listResult.value, pathArg);
-      if (!worktree) {
-        if (json)
-          printJsonError(
-            `Worktree not found: ${pathArg}`,
-            ErrorCode.WORKTREE_NOT_FOUND,
-          );
-        console.error(formatError(`Worktree not found: ${pathArg}`));
-        process.exit(1);
-      }
-    }
+          let branchDeleted = false;
+          if (options.deleteBranch && worktree.branch) {
+            const deleted = await deleteBranch(worktree.branch, true);
+            if (deleted.ok) branchDeleted = true;
+            else reporter.warning(deleted.error.message);
+          } else if (worktree.branch && reporter.interactive && !options.yes) {
+            const defaultBranch = await getDefaultBranch();
+            const [merged, commitsAhead] = await Promise.all([
+              isBranchMerged(worktree.branch, defaultBranch),
+              getCommitsAhead(worktree.branch, defaultBranch),
+            ]);
+            const clean = merged || commitsAhead === 0;
+            const shouldDelete = await confirmDestructive(
+              `Delete branch ${formatBranch(worktree.branch)}?`,
+              {
+                initialValue: clean,
+                activeLabel: merged
+                  ? "Yes (recommended, branch is merged)"
+                  : commitsAhead === 0
+                    ? "Yes (recommended, no changes)"
+                    : "Yes (has unmerged changes)",
+              },
+            );
+            if (shouldDelete) {
+              const deleted = await deleteBranch(worktree.branch, !clean);
+              if (deleted.ok) branchDeleted = true;
+              else reporter.warning(deleted.error.message);
+            }
+          }
 
-    if (worktree.isMain) {
-      if (json)
-        printJsonError(
-          "Cannot remove the main worktree",
-          ErrorCode.CANNOT_REMOVE_MAIN,
-        );
-      console.error(formatError("Cannot remove the main worktree"));
-      process.exit(1);
-    }
-
-    // In JSON mode, skip confirmation (act as --yes)
-    const skipConfirm = json || options.yes;
-
-    if (!json) intro("wtr remove");
-
-    if (!skipConfirm) {
-      const message =
-        options.deleteBranch && worktree.branch
-          ? `Remove worktree at ${formatPath(worktree.path)} and delete branch ${formatBranch(worktree.branch)}?`
-          : `Remove worktree at ${formatPath(worktree.path)}?`;
-
-      const confirmed = await confirmDestructive(message, {
-        initialValue: true,
-        activeLabel: "Yes (recommended)",
-      });
-      if (!confirmed) {
-        outro("Aborted");
-        return;
-      }
-    }
-
-    if (worktree.isLocked) {
-      if (!json)
-        console.log(
-          formatWarning("Worktree is locked. Use --force to remove anyway."),
-        );
-      if (!options.force) {
-        if (json)
-          printJsonError(
-            "Worktree is locked. Use --force to remove.",
-            ErrorCode.WORKTREE_LOCKED,
-          );
-        process.exit(1);
-      }
-    }
-
-    const s = json ? null : spinner();
-
-    // Check for an associated database before removing the worktree directory
-    const worktreeDbName = readWorktreeDb(worktree.path);
-    let databaseDropped = false;
-
-    if (worktreeDbName) {
-      // Reach the server the clone lives on, parsed from the worktree's
-      // DATABASE_URL (falls back to main's env if the worktree has none).
-      const mainResult = await getMainWorktreePath();
-      const dbSource =
-        findDatabaseUrl(worktree.path) ??
-        (mainResult.ok ? findDatabaseUrl(mainResult.value) : undefined);
-      const connection = dbSource ? parseConnection(dbSource.url) : {};
-
-      s?.start(`Dropping database ${pc.cyan(worktreeDbName)}`);
-      const dbResult = dropDatabase(worktreeDbName, connection);
-      if (dbResult.ok) {
-        s?.stop(pc.green(`Database ${worktreeDbName} dropped`));
-        databaseDropped = true;
-      } else {
-        s?.stop(pc.yellow("Could not drop database"));
-        if (!json) log.warning(dbResult.error.message);
-      }
-    }
-
-    s?.start(`Removing worktree at ${formatPath(worktree.path)}`);
-
-    const result = await removeWorktree({
-      path: worktree.path,
-      force: options.force ?? false,
-    });
-
-    if (!result.ok) {
-      s?.stop(pc.red("Failed"));
-      if (json) printJsonError(result.error.message);
-      console.error(formatError(result.error.message));
-      process.exit(1);
-    }
-
-    s?.stop(pc.green("Worktree removed"));
-
-    let branchDeleted = false;
-
-    if (options.deleteBranch && worktree.branch) {
-      s?.start(`Deleting branch ${formatBranch(worktree.branch)}`);
-      // Force-delete: user explicitly asked to delete the branch, and
-      // git branch -d refuses to delete squash-merged branches
-      const branchResult = await deleteBranch(worktree.branch, true);
-
-      if (branchResult.ok) {
-        s?.stop(pc.green("Branch deleted"));
-        branchDeleted = true;
-      } else {
-        s?.stop(pc.yellow("Could not delete branch"));
-        if (!json) log.warning(branchResult.error.message);
-      }
-    } else if (worktree.branch && !skipConfirm) {
-      const defaultBranch = await getDefaultBranch();
-      const [isMerged, commitsAhead] = await Promise.all([
-        isBranchMerged(worktree.branch, defaultBranch),
-        getCommitsAhead(worktree.branch, defaultBranch),
-      ]);
-      const isClean = isMerged || commitsAhead === 0;
-
-      let activeLabel: string;
-      if (isMerged) {
-        activeLabel = "Yes (recommended, branch is merged)";
-      } else if (commitsAhead === 0) {
-        activeLabel = "Yes (recommended, no changes)";
-      } else {
-        activeLabel = "Yes (has unmerged changes)";
-      }
-
-      const shouldDelete = await confirmDestructive(
-        `Delete branch ${formatBranch(worktree.branch)}?`,
-        {
-          initialValue: isClean,
-          activeLabel,
+          return { ...removed.value, branchDeleted };
         },
-      );
-
-      if (shouldDelete) {
-        s?.start(`Deleting branch ${formatBranch(worktree.branch)}`);
-        const branchResult = await deleteBranch(worktree.branch, !isClean);
-
-        if (branchResult.ok) {
-          s?.stop(pc.green("Branch deleted"));
-          branchDeleted = true;
-        } else {
-          s?.stop(pc.yellow("Could not delete branch"));
-          log.warning(branchResult.error.message);
-        }
-      }
-    }
-
-    if (json) {
-      printJson({
-        path: worktree.path,
-        branch: worktree.branch,
-        removed: true,
-        branchDeleted,
-        ...(worktreeDbName
-          ? { databaseDropped, database: worktreeDbName }
-          : {}),
+        renderHuman: ({ path }, reporter) =>
+          reporter.outro(`Removed worktree at ${formatPath(path)}`),
       });
-    } else {
-      outro(`Removed worktree at ${formatPath(worktree.path)}`);
-    }
-  });
+    });

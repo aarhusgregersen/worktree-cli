@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 
 const xdgConfigHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
 
@@ -37,6 +38,38 @@ export interface WtConfig {
   readonly portExclusions: readonly string[];
   readonly terminal: TerminalConfig;
 }
+
+export const terminalConfigInputSchema = z
+  .strictObject({
+    mode: z.enum(["window", "tab"]),
+    autoMode: z.boolean(),
+    focus: z.boolean(),
+  })
+  .partial();
+
+export const wtConfigInputSchema = z
+  .strictObject({
+    copyFiles: z.array(z.string()),
+    worktreeDir: z.string().trim().min(1),
+    portOffset: z.number().int().nonnegative(),
+    portExclusions: z.array(z.string()),
+    terminal: terminalConfigInputSchema,
+  })
+  .partial();
+
+export type WtConfigInput = z.infer<typeof wtConfigInputSchema>;
+
+export const wtConfigSchema = z.strictObject({
+  copyFiles: z.array(z.string()),
+  worktreeDir: z.string().trim().min(1).optional(),
+  portOffset: z.number().int().nonnegative(),
+  portExclusions: z.array(z.string()),
+  terminal: z.strictObject({
+    mode: z.enum(["window", "tab"]),
+    autoMode: z.boolean(),
+    focus: z.boolean(),
+  }),
+});
 
 export const DEFAULT_TERMINAL_CONFIG: TerminalConfig = {
   mode: "window",

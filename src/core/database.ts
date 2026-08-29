@@ -1,8 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Result, err, ok } from "../utils/result.js";
 import { copyFiles } from "./env.js";
+import {
+  parseEnvAssignment,
+  readEnvFiles,
+  rewriteEnvFiles,
+} from "./envDocument.js";
 
 const WTR_DB_FILE = ".wtr-db";
 
@@ -108,27 +113,18 @@ export const replaceDatabaseName = (
 export const findDatabaseUrl = (
   dir: string,
 ): { file: string; key: string; url: string } | undefined => {
-  const envFiles = [
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.development.local",
-  ];
-
-  for (const envFile of envFiles) {
-    const filePath = join(dir, envFile);
-    if (!existsSync(filePath)) continue;
-
-    const content = readFileSync(filePath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("#") || !trimmed) continue;
-
-      const match = trimmed.match(
-        /^(DATABASE_URL|DB_URL|POSTGRES_URL)=["']?(.+?)["']?$/,
-      );
-      if (match?.[1] && match[2]) {
-        return { file: envFile, key: match[1], url: match[2] };
+  for (const envFile of readEnvFiles(dir)) {
+    for (const line of envFile.content.split(/\r?\n/)) {
+      const assignment = parseEnvAssignment(line);
+      if (
+        assignment &&
+        ["DATABASE_URL", "DB_URL", "POSTGRES_URL"].includes(assignment.key)
+      ) {
+        return {
+          file: envFile.name,
+          key: assignment.key,
+          url: assignment.value,
+        };
       }
     }
   }
@@ -144,45 +140,13 @@ export const updateDatabaseUrlInEnvFiles = (
   dir: string,
   newDbName: string,
 ): Result<string[], Error> => {
-  const envFiles = [
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.development.local",
-  ];
-  const updated: string[] = [];
-
-  for (const envFile of envFiles) {
-    const filePath = join(dir, envFile);
-    if (!existsSync(filePath)) continue;
-
-    const content = readFileSync(filePath, "utf-8");
-    const lines = content.split("\n");
-    let changed = false;
-
-    const newLines = lines.map((line) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("#") || !trimmed) return line;
-
-      const match = trimmed.match(
-        /^(DATABASE_URL|DB_URL|POSTGRES_URL)=["']?(.+?)["']?$/,
-      );
-      if (!match?.[1] || !match[2]) return line;
-
-      const newUrl = replaceDatabaseName(match[2], newDbName);
-      if (!newUrl) return line;
-
-      changed = true;
-      return `${match[1]}=${newUrl}`;
-    });
-
-    if (changed) {
-      writeFileSync(filePath, newLines.join("\n"));
-      updated.push(envFile);
+  const result = rewriteEnvFiles(dir, (assignment) => {
+    if (!["DATABASE_URL", "DB_URL", "POSTGRES_URL"].includes(assignment.key)) {
+      return undefined;
     }
-  }
-
-  return ok(updated);
+    return replaceDatabaseName(assignment.value, newDbName);
+  });
+  return result.ok ? ok([...result.value.updatedFiles]) : result;
 };
 
 /**
@@ -261,8 +225,20 @@ export const ensureWorktreeEnv = (
 /**
  * Write the database name to a .wtr-db tracking file in the worktree.
  */
-export const writeWorktreeDb = (worktreePath: string, dbName: string): void => {
-  writeFileSync(join(worktreePath, WTR_DB_FILE), dbName, "utf-8");
+export const writeWorktreeDb = (
+  worktreePath: string,
+  dbName: string,
+): Result<void, Error> => {
+  try {
+    writeFileSync(join(worktreePath, WTR_DB_FILE), dbName, "utf-8");
+    return ok(undefined);
+  } catch (error) {
+    return err(
+      new Error(
+        `Failed to track database "${dbName}": ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+  }
 };
 
 /**
@@ -273,6 +249,20 @@ export const readWorktreeDb = (worktreePath: string): string | undefined => {
   const filePath = join(worktreePath, WTR_DB_FILE);
   if (!existsSync(filePath)) return undefined;
   return readFileSync(filePath, "utf-8").trim();
+};
+
+export const removeWorktreeDb = (worktreePath: string): Result<void, Error> => {
+  try {
+    const path = join(worktreePath, WTR_DB_FILE);
+    if (existsSync(path)) unlinkSync(path);
+    return ok(undefined);
+  } catch (error) {
+    return err(
+      new Error(
+        `Failed to remove database tracking file: ${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+  }
 };
 
 /**

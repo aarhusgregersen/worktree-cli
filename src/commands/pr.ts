@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import pc from "picocolors";
+import { fail, runCliAction, unwrapCli } from "../cliRuntime.js";
 import { ErrorCode } from "../core/errors.js";
 import {
   createPr,
@@ -7,172 +8,94 @@ import {
   isGhAvailable,
   pushBranch,
 } from "../core/gh.js";
-import { isGitRepository } from "../core/git.js";
 import { isBranchPushed } from "../core/status.js";
+import { formatBranch, formatPath } from "../output/formatter.js";
+import { textInput } from "../prompts/interactive.js";
 import {
-  type WorktreeInfo,
-  findWorktree,
-  listWorktrees,
-} from "../core/worktree.js";
-import { formatBranch, formatError, formatPath } from "../output/formatter.js";
-import { printJson, printJsonError } from "../output/json.js";
-import {
-  intro,
-  log,
-  outro,
-  selectWorktree,
-  spinner,
-  textInput,
-} from "../prompts/interactive.js";
+  requireGitRepository,
+  requireWorktrees,
+  resolveWorktreeTarget,
+} from "./shared.js";
 
-export const prCommand = new Command("pr")
-  .description("Create a pull request for a worktree")
-  .argument(
-    "[worktree]",
-    "Worktree identifier (branch, path, or # from `wtr ls`)",
-  )
-  .option("--title <title>", "PR title")
-  .option("--body <body>", "PR body")
-  .option("--draft", "Create as draft PR")
-  .option("--json", "Output as JSON")
-  .action(async (identifier: string | undefined, options) => {
-    const json = options.json ?? false;
+const titleFromBranch = (branch: string): string =>
+  branch
+    .replace(/^(feature|fix|chore|docs|refactor|test)\//, "")
+    .replace(/[-_]/g, " ")
+    .replace(/^\w/, (character) => character.toUpperCase());
 
-    if (!isGitRepository()) {
-      if (json)
-        printJsonError("Not a git repository", ErrorCode.NOT_GIT_REPOSITORY);
-      console.error(formatError("Not a git repository"));
-      process.exit(1);
-    }
+export const createPrCommand = (): Command =>
+  new Command("pr")
+    .description("Create a pull request for a worktree")
+    .argument(
+      "[worktree]",
+      "Worktree identifier (branch, path, or # from `wtr ls`)",
+    )
+    .option("--title <title>", "PR title")
+    .option("--body <body>", "PR body")
+    .option("--draft", "Create as draft PR")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string | undefined, options) => {
+      await runCliAction({
+        json: options.json ?? false,
+        action: async (reporter) => {
+          requireGitRepository();
+          if (!(await isGhAvailable())) {
+            return fail(
+              "GitHub CLI (gh) is not installed. Install it from https://cli.github.com",
+              { code: ErrorCode.GH_NOT_AVAILABLE },
+            );
+          }
+          const worktree = await resolveWorktreeTarget({
+            worktrees: await requireWorktrees(),
+            identifier,
+            reporter,
+          });
+          if (!worktree.branch) {
+            return fail("Cannot create PR for a detached worktree");
+          }
+          reporter.intro("wtr pr");
 
-    const ghAvailable = await isGhAvailable();
-    if (!ghAvailable) {
-      const msg =
-        "GitHub CLI (gh) is not installed. Install it from https://cli.github.com";
-      if (json) printJsonError(msg, ErrorCode.GH_NOT_AVAILABLE);
-      console.error(formatError(msg));
-      process.exit(1);
-    }
+          const existing = await getPrForBranch(worktree.branch, worktree.path);
+          if (existing) {
+            return { existed: true, pushed: false, pr: existing };
+          }
 
-    const listResult = await listWorktrees();
-    if (!listResult.ok) {
-      if (json) printJsonError(listResult.error.message);
-      console.error(formatError(listResult.error.message));
-      process.exit(1);
-    }
+          const progress = reporter.spinner();
+          let pushed = false;
+          if (!(await isBranchPushed(worktree.branch, worktree.path))) {
+            progress.start(`Pushing branch ${formatBranch(worktree.branch)}`);
+            unwrapCli(await pushBranch(worktree.branch, worktree.path));
+            progress.stop(pc.green("Branch pushed"));
+            pushed = true;
+          }
 
-    let worktree: WorktreeInfo | undefined;
-    if (!identifier) {
-      if (json) {
-        printJsonError(
-          "Worktree identifier required in --json mode",
-          ErrorCode.IDENTIFIER_REQUIRED,
-        );
-        process.exit(1);
-      }
-      worktree = await selectWorktree(listResult.value);
-    } else {
-      worktree = findWorktree(listResult.value, identifier);
-      if (!worktree) {
-        if (json)
-          printJsonError(
-            `Worktree not found: ${identifier}`,
-            ErrorCode.WORKTREE_NOT_FOUND,
+          const defaultTitle = titleFromBranch(worktree.branch);
+          const title =
+            options.title ??
+            (reporter.interactive
+              ? await textInput("PR title:", { defaultValue: defaultTitle })
+              : defaultTitle);
+          progress.start("Creating pull request");
+          const pr = unwrapCli(
+            await createPr({
+              title,
+              body: options.body,
+              draft: options.draft ?? false,
+              cwd: worktree.path,
+            }),
           );
-        console.error(formatError(`Worktree not found: ${identifier}`));
-        process.exit(1);
-      }
-    }
-
-    if (!worktree.branch) {
-      if (json) printJsonError("Cannot create PR for a detached worktree");
-      console.error(formatError("Cannot create PR for a detached worktree"));
-      process.exit(1);
-    }
-
-    if (!json) intro("wtr pr");
-
-    // Check if PR already exists
-    const existingPr = await getPrForBranch(worktree.branch, worktree.path);
-    if (existingPr) {
-      if (json) {
-        printJson({
-          existed: true,
-          pushed: false,
-          pr: existingPr,
-        });
-      } else {
-        log.info(`PR already exists: ${existingPr.url}`);
-        outro(`PR #${existingPr.number}: ${existingPr.title}`);
-      }
-      return;
-    }
-
-    const s = json ? null : spinner();
-
-    // Push if not pushed
-    let pushed = false;
-    const isPushed = await isBranchPushed(worktree.branch, worktree.path);
-    if (!isPushed) {
-      s?.start(`Pushing branch ${formatBranch(worktree.branch)}`);
-      const pushResult = await pushBranch(worktree.branch, worktree.path);
-      if (!pushResult.ok) {
-        s?.stop(pc.red("Failed"));
-        if (json) printJsonError(pushResult.error.message);
-        console.error(formatError(pushResult.error.message));
-        process.exit(1);
-      }
-      s?.stop(pc.green("Branch pushed"));
-      pushed = true;
-    }
-
-    // Get title
-    let title = options.title;
-    if (!title) {
-      if (json) {
-        // Default to humanized branch name
-        title = worktree.branch
-          .replace(/^(feature|fix|chore|docs|refactor|test)\//, "")
-          .replace(/[-_]/g, " ")
-          .replace(/^\w/, (c) => c.toUpperCase());
-      } else {
-        const defaultTitle = worktree.branch
-          .replace(/^(feature|fix|chore|docs|refactor|test)\//, "")
-          .replace(/[-_]/g, " ")
-          .replace(/^\w/, (c) => c.toUpperCase());
-
-        title = await textInput("PR title:", {
-          defaultValue: defaultTitle,
-        });
-      }
-    }
-
-    // Create PR
-    s?.start("Creating pull request");
-    const prResult = await createPr({
-      title,
-      body: options.body,
-      draft: options.draft ?? false,
-      cwd: worktree.path,
-    });
-
-    if (!prResult.ok) {
-      s?.stop(pc.red("Failed"));
-      if (json) printJsonError(prResult.error.message);
-      console.error(formatError(prResult.error.message));
-      process.exit(1);
-    }
-
-    s?.stop(pc.green("PR created"));
-
-    if (json) {
-      printJson({
-        existed: false,
-        pushed,
-        pr: prResult.value,
+          progress.stop(pc.green("PR created"));
+          return { existed: false, pushed, pr };
+        },
+        renderHuman: (result, reporter) => {
+          reporter.info(
+            result.existed
+              ? `PR already exists: ${result.pr.url}`
+              : `PR URL: ${formatPath(result.pr.url)}`,
+          );
+          reporter.outro(
+            `${result.existed ? "PR" : "Created PR"} #${result.pr.number}: ${result.pr.title}`,
+          );
+        },
       });
-    } else {
-      log.info(`PR URL: ${formatPath(prResult.value.url)}`);
-      outro(`Created PR #${prResult.value.number}: ${prResult.value.title}`);
-    }
-  });
+    });

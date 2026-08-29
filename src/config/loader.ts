@@ -13,6 +13,9 @@ import {
   GLOBAL_CONFIG_PATH,
   LEGACY_GLOBAL_CONFIG_PATH,
   type WtConfig,
+  type WtConfigInput,
+  wtConfigInputSchema,
+  wtConfigSchema,
 } from "./schema.js";
 
 const resolveGlobalConfigPath = (): string | null => {
@@ -21,7 +24,44 @@ const resolveGlobalConfigPath = (): string | null => {
   return null;
 };
 
-export const loadGlobalConfig = (): Result<Partial<WtConfig>, Error> => {
+const formatConfigError = (path: string, error: unknown): Error => {
+  if (
+    error &&
+    typeof error === "object" &&
+    "issues" in error &&
+    Array.isArray(error.issues)
+  ) {
+    const issues = error.issues
+      .map((issue) => {
+        if (!issue || typeof issue !== "object") return String(issue);
+        const issuePath =
+          "path" in issue && Array.isArray(issue.path)
+            ? issue.path.join(".") || "<root>"
+            : "<root>";
+        const message =
+          "message" in issue ? String(issue.message) : "Invalid value";
+        return `${issuePath}: ${message}`;
+      })
+      .join("; ");
+    return new Error(`Invalid config (${path}): ${issues}`);
+  }
+  return new Error(
+    `Failed to parse config (${path}): ${error instanceof Error ? error.message : String(error)}`,
+  );
+};
+
+export const parseConfigText = (
+  path: string,
+  content: string,
+): Result<WtConfigInput, Error> => {
+  try {
+    return ok(wtConfigInputSchema.parse(JSON.parse(content)));
+  } catch (error) {
+    return err(formatConfigError(path, error));
+  }
+};
+
+export const loadGlobalConfig = (): Result<WtConfigInput, Error> => {
   const path = resolveGlobalConfigPath();
   if (!path) {
     return ok({});
@@ -29,11 +69,11 @@ export const loadGlobalConfig = (): Result<Partial<WtConfig>, Error> => {
 
   try {
     const content = readFileSync(path, "utf-8");
-    return ok(JSON.parse(content) as Partial<WtConfig>);
+    return parseConfigText(path, content);
   } catch (error) {
     return err(
       new Error(
-        `Failed to parse global config (${path}): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to read global config (${path}): ${error instanceof Error ? error.message : String(error)}`,
       ),
     );
   }
@@ -43,7 +83,10 @@ export const globalConfigExists = (): boolean => {
   return resolveGlobalConfigPath() !== null;
 };
 
-const mergeConfig = (base: WtConfig, override: Partial<WtConfig>): WtConfig => {
+export const mergeConfig = (
+  base: WtConfig,
+  override: WtConfigInput,
+): WtConfig => {
   const worktreeDir = override.worktreeDir ?? base.worktreeDir;
 
   return {
@@ -65,12 +108,8 @@ export const loadConfig = (repoRoot: string): Result<WtConfig, Error> => {
 
   // Merge global config
   const globalResult = loadGlobalConfig();
-  if (globalResult.ok) {
-    config = mergeConfig(config, globalResult.value);
-  } else {
-    // Warn but continue — global config is a convenience
-    console.warn(globalResult.error.message);
-  }
+  if (!globalResult.ok) return globalResult;
+  config = mergeConfig(config, globalResult.value);
 
   // Merge local config
   const configPath = join(repoRoot, CONFIG_FILENAME);
@@ -80,12 +119,13 @@ export const loadConfig = (repoRoot: string): Result<WtConfig, Error> => {
 
   try {
     const content = readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(content) as Partial<WtConfig>;
-    return ok(mergeConfig(config, parsed));
+    const parsed = parseConfigText(configPath, content);
+    if (!parsed.ok) return parsed;
+    return ok(wtConfigSchema.parse(mergeConfig(config, parsed.value)));
   } catch (error) {
     return err(
       new Error(
-        `Failed to parse ${CONFIG_FILENAME}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to read ${CONFIG_FILENAME}: ${error instanceof Error ? error.message : String(error)}`,
       ),
     );
   }
@@ -98,7 +138,8 @@ export const saveConfig = (
   const configPath = join(repoRoot, CONFIG_FILENAME);
 
   try {
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+    const validated = wtConfigSchema.parse(config);
+    writeFileSync(configPath, `${JSON.stringify(validated, null, 2)}\n`);
     return ok(undefined);
   } catch (error) {
     return err(
