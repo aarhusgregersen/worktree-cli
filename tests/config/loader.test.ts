@@ -14,15 +14,23 @@ describe("parseConfigText", () => {
     });
   });
 
-  it("rejects unknown fields with their path", () => {
+  it("ignores unknown fields", () => {
     const result = parseConfigText(
       "/repo/.wtr.json",
-      JSON.stringify({ terminal: { focuz: true } }),
+      JSON.stringify({ db: true, future: 1, terminal: { focuz: true } }),
+    );
+    expect(result).toEqual({ ok: true, value: { db: true, terminal: {} } });
+  });
+
+  it("reports invalid fields with the config path", () => {
+    const result = parseConfigText(
+      "/repo/.wtr.json",
+      JSON.stringify({ db: "yes" }),
     );
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.message).toContain("/repo/.wtr.json");
-      expect(result.error.message).toContain("terminal");
+      expect(result.error.message).toContain("db");
     }
   });
 
@@ -47,12 +55,14 @@ describe("mergeConfig", () => {
     });
     const local = mergeConfig(global, {
       portOffset: 200,
+      db: true,
       terminal: { mode: "tab" },
     });
     expect(local).toEqual({
       copyFiles: [".env"],
       portOffset: 200,
       portExclusions: [],
+      db: true,
       terminal: { mode: "tab", autoMode: false, focus: true },
     });
   });

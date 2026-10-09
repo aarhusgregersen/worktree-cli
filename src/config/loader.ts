@@ -94,6 +94,7 @@ export const mergeConfig = (
     ...(worktreeDir ? { worktreeDir } : {}),
     portOffset: override.portOffset ?? base.portOffset,
     portExclusions: override.portExclusions ?? base.portExclusions,
+    db: override.db ?? base.db,
     terminal: {
       ...DEFAULT_TERMINAL_CONFIG,
       ...base.terminal,
