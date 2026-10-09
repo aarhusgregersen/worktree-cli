@@ -69,6 +69,7 @@ export const createAddCommand = (): Command =>
       "--db [name]",
       "Clone the PostgreSQL database for this worktree (name defaults to <template>_wtr_<branch>)",
     )
+    .option("--no-db", "Skip database cloning even if enabled in config")
     .option("--open", "Open a new terminal window with Claude Code")
     .option(
       "--plan <text>",
@@ -176,14 +177,15 @@ export const createAddCommand = (): Command =>
             );
           }
 
+          const db: boolean | string = options.db ?? config.db;
           let database: AddJsonResult["database"];
-          if (options.db !== undefined) {
+          if (db !== false) {
             progress.start("Cloning database");
             const cloned = cloneDatabaseForWorktree({
               worktreePath,
               mainPath: mainWorktreePath,
               branch,
-              ...(typeof options.db === "string" ? { name: options.db } : {}),
+              ...(typeof db === "string" ? { name: db } : {}),
             });
             if (!cloned.ok) throw cloned.error;
             progress.stop(pc.green("Database cloned"));

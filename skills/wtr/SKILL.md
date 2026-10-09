@@ -231,6 +231,8 @@ wtr add feature/auth --db --plan "Add auth tables"
 wtr add feature/auth --db my_custom_db --open
 ```
 
+If the repo's `.wtr.json` sets `"db": true`, every `wtr add` clones the database; pass `--no-db` to skip it.
+
 This runs `createdb <new> -T <template>` using the database found in `DATABASE_URL` from the worktree's `.env` files, then updates `DATABASE_URL` to point at the clone. On `wtr remove`, the cloned database is automatically dropped.
 
 Database cleanup is fail-safe: if the database cannot be dropped, the worktree
