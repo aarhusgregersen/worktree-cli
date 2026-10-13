@@ -56,6 +56,8 @@ echo "plan" | wtr add feature/x --plan -  # Read plan from stdin
 wtr add feature/auth --base develop     # Branch from develop
 wtr add feature/auth --no-copy          # Skip file copying
 wtr add feature/auth --no-bump          # Skip port bumping
+wtr add feature/auth --db               # Clone the local PostgreSQL database
+wtr add feature/auth --no-db            # Skip cloning even if "db": true in config
 wtr add feature/auth --json             # JSON output
 ```
 
@@ -224,6 +226,7 @@ Created by `wtr init` in the repository root. Add to `.gitignore`.
   "copyFiles": [".env", ".env.local", ".vscode/settings.json"],
   "portOffset": 100,
   "portExclusions": [],
+  "db": false,
   "terminal": {
     "mode": "window",
     "autoMode": false,
@@ -244,11 +247,12 @@ Fallback configuration used when no local `.wtr.json` exists.
 | `worktreeDir` | _(unset)_ | Directory new worktrees are created in — see [Worktree location](#worktree-location) |
 | `portOffset` | `100` | Port increment per worktree index |
 | `portExclusions` | `[]` | Additional port variable patterns to exclude from bumping |
+| `db` | `false` | Clone the PostgreSQL database on every `wtr add`, as if `--db` were passed. Override per run with `--no-db` |
 | `terminal.mode` | `"window"` | `"window"` or `"tab"` — how new sessions open |
 | `terminal.autoMode` | `false` | Pass `--permission-mode auto` when launching Claude |
 | `terminal.focus` | `false` | If `true`, the new terminal window steals focus. Default keeps focus on your current app. |
 
-Configuration is validated strictly at runtime. Unknown keys, invalid types,
+Configuration is validated at runtime. Unknown keys are ignored. Invalid types,
 negative/non-integer port offsets, empty `worktreeDir` values, and unsupported
 terminal modes fail with `INVALID_CONFIG` and include the offending field path.
 

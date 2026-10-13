@@ -36,11 +36,12 @@ export interface WtConfig {
   readonly worktreeDir?: string;
   readonly portOffset: number;
   readonly portExclusions: readonly string[];
+  readonly db: boolean;
   readonly terminal: TerminalConfig;
 }
 
 export const terminalConfigInputSchema = z
-  .strictObject({
+  .object({
     mode: z.enum(["window", "tab"]),
     autoMode: z.boolean(),
     focus: z.boolean(),
@@ -48,23 +49,25 @@ export const terminalConfigInputSchema = z
   .partial();
 
 export const wtConfigInputSchema = z
-  .strictObject({
+  .object({
     copyFiles: z.array(z.string()),
     worktreeDir: z.string().trim().min(1),
     portOffset: z.number().int().nonnegative(),
     portExclusions: z.array(z.string()),
+    db: z.boolean(),
     terminal: terminalConfigInputSchema,
   })
   .partial();
 
 export type WtConfigInput = z.infer<typeof wtConfigInputSchema>;
 
-export const wtConfigSchema = z.strictObject({
+export const wtConfigSchema = z.object({
   copyFiles: z.array(z.string()),
   worktreeDir: z.string().trim().min(1).optional(),
   portOffset: z.number().int().nonnegative(),
   portExclusions: z.array(z.string()),
-  terminal: z.strictObject({
+  db: z.boolean(),
+  terminal: z.object({
     mode: z.enum(["window", "tab"]),
     autoMode: z.boolean(),
     focus: z.boolean(),
@@ -81,6 +84,7 @@ export const DEFAULT_CONFIG: WtConfig = {
   copyFiles: [],
   portOffset: 100,
   portExclusions: [],
+  db: false,
   terminal: DEFAULT_TERMINAL_CONFIG,
 };
 

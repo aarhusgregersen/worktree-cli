@@ -91,6 +91,7 @@ export const createInitCommand = (): Command =>
             copyFiles,
             portOffset,
             portExclusions: [],
+            db: false,
             terminal: { ...DEFAULT_TERMINAL_CONFIG, autoMode },
           };
           unwrapCli(saveConfig(repoRoot, config));
