@@ -9,7 +9,7 @@ import {
   isBranchMerged,
 } from "../core/branch.js";
 import { CliCancelled } from "../core/errors.js";
-import { getPrForBranch } from "../core/gh.js";
+import { getPrsForBranches } from "../core/gh.js";
 import { removeManagedWorktrees } from "../core/lifecycle.js";
 import { hasUncommittedChanges } from "../core/status.js";
 import { pruneWorktrees } from "../core/worktree.js";
@@ -102,13 +102,21 @@ export const createCleanCommand = (): Command =>
             const nonMain = (await requireWorktrees()).filter(
               (worktree) => !worktree.isMain && worktree.branch,
             );
+            const prs = await getPrsForBranches(
+              nonMain.flatMap((worktree) =>
+                worktree.branch ? [worktree.branch] : [],
+              ),
+            );
             const found = await Promise.all(
               nonMain.map(async (worktree): Promise<MergedCandidate | null> => {
                 const branch = worktree.branch;
                 if (!branch) return null;
-                const [merged, pr, status] = await Promise.all([
-                  isBranchMerged(branch, defaultBranch),
-                  getPrForBranch(branch, worktree.path),
+                const prMerged = prs.get(branch)?.state === "MERGED";
+                const [merged, status] = await Promise.all([
+                  prMerged ||
+                    isBranchMerged(branch, defaultBranch, {
+                      skipGh: prs.has(branch),
+                    }),
                   hasUncommittedChanges(worktree.path),
                 ]);
                 if (!status.ok) {
@@ -116,7 +124,6 @@ export const createCleanCommand = (): Command =>
                     `Could not inspect ${worktree.path}; treating it as dirty: ${status.error.message}`,
                   );
                 }
-                const prMerged = pr?.state === "MERGED";
                 if (!merged && !prMerged) return null;
                 return {
                   path: worktree.path,

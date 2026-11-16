@@ -77,11 +77,14 @@ wtr list --porcelain  # Tab-separated for scripting
 Show enriched status: ahead count, diff stats, dirty state, push status, PR info, Claude activity, and last commit.
 
 ```bash
-wtr status          # Table format
-wtr st -a           # Include main worktree
-wtr status --no-pr  # Skip PR lookups (faster)
-wtr status --json   # JSON output
+wtr status            # Table format
+wtr st -a             # Include main worktree
+wtr status --no-pr    # Skip PR lookups (faster)
+wtr status --refresh  # Bypass the 60s PR cache
+wtr status --json     # JSON output
 ```
+
+PR status is fetched for all worktrees in one GitHub call and cached for 60 seconds.
 
 ### `wtr current`
 
