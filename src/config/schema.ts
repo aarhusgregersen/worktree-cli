@@ -17,6 +17,9 @@ export const GLOBAL_CACHE_DIR = join(xdgCacheHome, "wtr");
 // Persistent cache of branches known to be merged (see core/mergeCache.ts).
 export const GLOBAL_CACHE_PATH = join(GLOBAL_CACHE_DIR, "merged.json");
 
+// Short-lived cache of PR lookups (see core/prCache.ts).
+export const PR_CACHE_PATH = join(GLOBAL_CACHE_DIR, "prs.json");
+
 // Marker written after the first-run welcome banner is shown, so it only
 // appears once. Regenerable state, so it lives in the XDG cache dir.
 export const WELCOME_MARKER_PATH = join(GLOBAL_CACHE_DIR, ".welcomed");

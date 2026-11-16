@@ -1,4 +1,5 @@
 import { execFile, execSync } from "node:child_process";
+import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 import { type Result, err, ok } from "../utils/result.js";
 
@@ -76,4 +77,15 @@ export const getMainWorktreePath = async (
   }
 
   return ok(firstWorktreeLine.replace("worktree ", ""));
+};
+
+// --git-common-dir points at the main repo's .git even from a linked worktree,
+// so every worktree of a repo shares one identity for cache keys.
+export const getRepoId = async (cwd?: string): Promise<string> => {
+  const result = await executeGitCommand(["rev-parse", "--git-common-dir"], {
+    cwd,
+  });
+  if (!result.ok) return cwd ?? "";
+  const dir = result.value.stdout.trim();
+  return isAbsolute(dir) ? dir : resolve(cwd ?? process.cwd(), dir);
 };

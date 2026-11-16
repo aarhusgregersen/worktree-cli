@@ -7,7 +7,7 @@ import {
   getDefaultBranch,
   getLastCommitDate,
 } from "../core/branch.js";
-import { type PrInfo, getPrForBranch } from "../core/gh.js";
+import { type PrInfo, getPrsForBranches } from "../core/gh.js";
 import {
   type DiffStat,
   getClaudeCwds,
@@ -34,6 +34,8 @@ interface StatusItem {
   readonly lastCommit: string;
 }
 
+const PR_CACHE_MAX_AGE_MS = 60_000;
+
 const EMPTY_DIFF: DiffStat = { filesChanged: 0, insertions: 0, deletions: 0 };
 
 export const createStatusCommand = (): Command =>
@@ -43,6 +45,7 @@ export const createStatusCommand = (): Command =>
     .option("--json", "Output as JSON")
     .option("-a, --all", "Include main worktree")
     .option("--no-pr", "Skip PR lookups")
+    .option("--refresh", "Bypass the PR cache and fetch fresh PR status")
     .action(async (options) => {
       await runCliAction<readonly StatusItem[]>({
         json: options.json ?? false,
@@ -52,9 +55,17 @@ export const createStatusCommand = (): Command =>
           const worktrees = options.all
             ? all
             : all.filter((worktree) => !worktree.isMain);
-          const [defaultBranch, claudeCwds] = await Promise.all([
+          const branches = worktrees.flatMap((worktree) =>
+            !worktree.isMain && worktree.branch ? [worktree.branch] : [],
+          );
+          const [defaultBranch, claudeCwds, prs] = await Promise.all([
             getDefaultBranch(),
             getClaudeCwds(),
+            options.pr !== false
+              ? getPrsForBranches(branches, {
+                  maxAgeMs: options.refresh ? 0 : PR_CACHE_MAX_AGE_MS,
+                })
+              : new Map<string, PrInfo | null>(),
           ]);
           return Promise.all(
             worktrees.map(async (worktree): Promise<StatusItem> => {
@@ -74,15 +85,12 @@ export const createStatusCommand = (): Command =>
                   lastCommit: "",
                 };
               }
-              const [ahead, diff, status, pushed, pr, lastCommit] =
+              const [ahead, diff, status, pushed, lastCommit] =
                 await Promise.all([
                   getCommitsAhead(worktree.branch, defaultBranch),
                   getDiffStat(worktree.branch, defaultBranch),
                   hasUncommittedChanges(worktree.path),
                   isBranchPushed(worktree.branch),
-                  options.pr !== false
-                    ? getPrForBranch(worktree.branch)
-                    : Promise.resolve(null),
                   getLastCommitDate("%cr", worktree.path),
                 ]);
               return {
@@ -95,7 +103,7 @@ export const createStatusCommand = (): Command =>
                 dirty: unwrapCli(status).dirty,
                 untrackedCount: unwrapCli(status).untrackedCount,
                 pushed,
-                pr,
+                pr: prs.get(worktree.branch) ?? null,
                 claude: isClaudeActive(claudeCwds, worktree.path),
                 lastCommit,
               };

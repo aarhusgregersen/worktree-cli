@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../src/core/git.js", () => ({
   executeGitCommand: vi.fn(),
+  getRepoId: vi.fn(async () => "/repo/.git"),
 }));
 vi.mock("../../src/core/gh.js", () => ({
   isGhAvailable: vi.fn(),
@@ -95,6 +96,24 @@ describe("isBranchMerged resolution order", () => {
 
     expect(await isBranchMerged("feature-x", "main")).toBe(true);
     expect(cacheMerged).not.toHaveBeenCalled();
+  });
+
+  it("skips gh when the caller already has a fresh PR state", async () => {
+    vi.mocked(isGhAvailable).mockResolvedValue(true);
+    vi.mocked(executeGitCommand).mockImplementation(async (args) => {
+      if (isArg(args, "branch", "--merged")) return okResult("  main\n");
+      if (isArg(args, "merge-base")) return okResult("basesha");
+      if (isArg(args, "rev-parse")) return okResult("treesha");
+      if (isArg(args, "commit-tree")) return okResult("tempsha");
+      if (isArg(args, "cherry")) return okResult("+ abc123");
+      return errResult();
+    });
+
+    expect(await isBranchMerged("feature-x", "main", { skipGh: true })).toBe(
+      false,
+    );
+    expect(isGhAvailable).not.toHaveBeenCalled();
+    expect(isPrMerged).not.toHaveBeenCalled();
   });
 
   it("returns false when gh is unavailable and local squash detection fails to match", async () => {

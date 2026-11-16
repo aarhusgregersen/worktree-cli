@@ -1,7 +1,6 @@
-import { isAbsolute, resolve } from "node:path";
 import { type Result, ok } from "../utils/result.js";
 import { isGhAvailable, isPrMerged } from "./gh.js";
-import { executeGitCommand } from "./git.js";
+import { executeGitCommand, getRepoId } from "./git.js";
 import { cacheMerged, isCachedMerged } from "./mergeCache.js";
 
 export const branchExists = async (
@@ -25,10 +24,16 @@ export const deleteBranch = async (
   return result.ok ? ok(undefined) : result;
 };
 
+export interface MergeCheckOptions {
+  readonly cwd?: string;
+  // Set when the caller already has a fresh PR state, to avoid a second lookup.
+  readonly skipGh?: boolean;
+}
+
 export const isBranchMerged = async (
   branchName: string,
   targetBranch: string,
-  cwd?: string,
+  { cwd, skipGh = false }: MergeCheckOptions = {},
 ): Promise<boolean> => {
   const result = await executeGitCommand(["branch", "--merged", targetBranch], {
     cwd,
@@ -47,22 +52,10 @@ export const isBranchMerged = async (
   // commits are never ancestors of the target). Try the cheap authoritative
   // paths first — persistent cache, then `gh` — before falling back to the
   // expensive local git reconstruction.
-  const fast = await fastIsSquashMerged(branchName, cwd);
+  const fast = await fastIsSquashMerged(branchName, cwd, skipGh);
   if (fast === true) return true;
 
   return isSquashMerged(branchName, targetBranch, cwd);
-};
-
-// Resolve a stable identity for the repository (shared across all its
-// worktrees) to key the merged cache. --git-common-dir points at the main
-// repo's .git even from a linked worktree.
-const getRepoId = async (cwd?: string): Promise<string> => {
-  const result = await executeGitCommand(["rev-parse", "--git-common-dir"], {
-    cwd,
-  });
-  if (!result.ok) return cwd ?? "";
-  const dir = result.value.stdout.trim();
-  return isAbsolute(dir) ? dir : resolve(cwd ?? process.cwd(), dir);
 };
 
 // Fast, authoritative squash-merge check backed by the GitHub PR state.
@@ -73,12 +66,13 @@ const getRepoId = async (cwd?: string): Promise<string> => {
 // return false: a negative gh result does not prove the branch is unmerged.
 const fastIsSquashMerged = async (
   branch: string,
-  cwd?: string,
+  cwd: string | undefined,
+  skipGh: boolean,
 ): Promise<boolean | null> => {
   const repoId = await getRepoId(cwd);
   if (isCachedMerged(repoId, branch)) return true;
 
-  if (!(await isGhAvailable())) return null;
+  if (skipGh || !(await isGhAvailable())) return null;
 
   if (await isPrMerged(branch, cwd)) {
     cacheMerged(repoId, branch);
