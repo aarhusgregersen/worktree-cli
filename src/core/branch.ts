@@ -1,5 +1,5 @@
 import { type Result, ok } from "../utils/result.js";
-import { isGhAvailable, isPrMerged } from "./gh.js";
+import { type PrInfo, getPrsForBranches, isGhAvailable } from "./gh.js";
 import { executeGitCommand, getRepoId } from "./git.js";
 import { cacheMerged, isCachedMerged } from "./mergeCache.js";
 
@@ -58,28 +58,57 @@ export const isBranchMerged = async (
   return isSquashMerged(branchName, targetBranch, cwd);
 };
 
+const getBranchTip = async (
+  branch: string,
+  cwd?: string,
+): Promise<string | null> => {
+  const result = await executeGitCommand(
+    ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`],
+    { cwd },
+  );
+  return result.ok ? result.value.stdout.trim() : null;
+};
+
+// A MERGED PR only proves the commits it carried were merged. A reused branch
+// name, or commits added after the merge, leave the local tip outside the PR head.
+export const isMergedByPr = async (
+  branch: string,
+  pr: PrInfo | null | undefined,
+  cwd?: string,
+): Promise<boolean> => {
+  if (pr?.state !== "MERGED" || !pr.headRefOid) return false;
+  const tip = await getBranchTip(branch, cwd);
+  if (!tip) return false;
+  const contained =
+    tip === pr.headRefOid ||
+    (
+      await executeGitCommand(
+        ["merge-base", "--is-ancestor", tip, pr.headRefOid],
+        { cwd },
+      )
+    ).ok;
+  if (contained) cacheMerged(await getRepoId(cwd), branch, tip);
+  return contained;
+};
+
 // Fast, authoritative squash-merge check backed by the GitHub PR state.
 // Returns true only when we can positively confirm the branch was merged
-// (cache hit, or `gh` reports the PR as MERGED). Returns null when we cannot
-// confirm — gh is missing, unauthenticated, the PR is from a fork, or there is
-// simply no PR — so the caller falls back to local git detection. We never
-// return false: a negative gh result does not prove the branch is unmerged.
+// (cache hit, or a MERGED PR whose head contains the local tip). Returns null
+// when we cannot confirm — gh is missing, unauthenticated, there is no PR, or
+// the branch moved on — so the caller falls back to local git detection.
 const fastIsSquashMerged = async (
   branch: string,
   cwd: string | undefined,
   skipGh: boolean,
 ): Promise<boolean | null> => {
-  const repoId = await getRepoId(cwd);
-  if (isCachedMerged(repoId, branch)) return true;
+  const tip = await getBranchTip(branch, cwd);
+  if (!tip) return null;
+  if (isCachedMerged(await getRepoId(cwd), branch, tip)) return true;
 
   if (skipGh || !(await isGhAvailable())) return null;
 
-  if (await isPrMerged(branch, cwd)) {
-    cacheMerged(repoId, branch);
-    return true;
-  }
-
-  return null;
+  const prs = await getPrsForBranches([branch], { cwd });
+  return (await isMergedByPr(branch, prs.get(branch), cwd)) ? true : null;
 };
 
 const isSquashMerged = async (

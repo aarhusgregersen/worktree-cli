@@ -7,6 +7,7 @@ import {
   fetchOrigin,
   getDefaultBranch,
   isBranchMerged,
+  isMergedByPr,
 } from "../core/branch.js";
 import { CliCancelled } from "../core/errors.js";
 import { getPrsForBranches } from "../core/gh.js";
@@ -111,7 +112,11 @@ export const createCleanCommand = (): Command =>
               nonMain.map(async (worktree): Promise<MergedCandidate | null> => {
                 const branch = worktree.branch;
                 if (!branch) return null;
-                const prMerged = prs.get(branch)?.state === "MERGED";
+                const prMerged = await isMergedByPr(
+                  branch,
+                  prs.get(branch),
+                  worktree.path,
+                );
                 const [merged, status] = await Promise.all([
                   prMerged ||
                     isBranchMerged(branch, defaultBranch, {

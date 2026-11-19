@@ -82,9 +82,7 @@ describe("cachePrs", () => {
     const written = JSON.parse(
       vi.mocked(writeFileSync).mock.calls[0]?.[1] as string,
     );
-    expect(Object.keys(written)).toEqual(
-      [key("/r", "new")],
-    );
+    expect(Object.keys(written)).toEqual([key("/r", "new")]);
     expect(written[key("/r", "new")]).toEqual({ pr: null, fetchedAt: NOW });
   });
 });
