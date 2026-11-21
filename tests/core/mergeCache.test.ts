@@ -29,24 +29,33 @@ describe("isCachedMerged", () => {
       throw new Error("ENOENT");
     });
     const { isCachedMerged } = await loadModule();
-    expect(isCachedMerged("/repo/.git", "feature-x")).toBe(false);
+    expect(isCachedMerged("/repo/.git", "feature-x", "sha1")).toBe(false);
   });
 
-  it("returns true for a stored repo + branch entry", async () => {
+  it("returns true only when the stored tip matches the current tip", async () => {
+    vi.mocked(readFileSync).mockReturnValue(
+      JSON.stringify({ [key("/repo/.git", "feature-x")]: "sha1" }),
+    );
+    const { isCachedMerged } = await loadModule();
+    expect(isCachedMerged("/repo/.git", "feature-x", "sha1")).toBe(true);
+    expect(isCachedMerged("/repo/.git", "feature-x", "sha2")).toBe(false);
+  });
+
+  it("treats legacy entries without a tip as a miss", async () => {
     vi.mocked(readFileSync).mockReturnValue(
       JSON.stringify({ [key("/repo/.git", "feature-x")]: true }),
     );
     const { isCachedMerged } = await loadModule();
-    expect(isCachedMerged("/repo/.git", "feature-x")).toBe(true);
+    expect(isCachedMerged("/repo/.git", "feature-x", "sha1")).toBe(false);
   });
 
   it("does not collide across repos with the same branch name", async () => {
     vi.mocked(readFileSync).mockReturnValue(
-      JSON.stringify({ [key("/repo-a/.git", "feature-x")]: true }),
+      JSON.stringify({ [key("/repo-a/.git", "feature-x")]: "sha1" }),
     );
     const { isCachedMerged } = await loadModule();
-    expect(isCachedMerged("/repo-a/.git", "feature-x")).toBe(true);
-    expect(isCachedMerged("/repo-b/.git", "feature-x")).toBe(false);
+    expect(isCachedMerged("/repo-a/.git", "feature-x", "sha1")).toBe(true);
+    expect(isCachedMerged("/repo-b/.git", "feature-x", "sha1")).toBe(false);
   });
 });
 
@@ -55,7 +64,7 @@ describe("cacheMerged", () => {
     vi.mocked(readFileSync).mockReturnValue(JSON.stringify({}));
     const { cacheMerged, isCachedMerged } = await loadModule();
 
-    cacheMerged("/repo/.git", "feature-x");
+    cacheMerged("/repo/.git", "feature-x", "sha1");
 
     expect(mkdirSync).toHaveBeenCalledWith(expect.any(String), {
       recursive: true,
@@ -63,10 +72,10 @@ describe("cacheMerged", () => {
     expect(writeFileSync).toHaveBeenCalledTimes(1);
     const written = vi.mocked(writeFileSync).mock.calls[0]?.[1] as string;
     expect(JSON.parse(written)).toEqual({
-      [key("/repo/.git", "feature-x")]: true,
+      [key("/repo/.git", "feature-x")]: "sha1",
     });
     // The in-memory view reflects the new entry immediately.
-    expect(isCachedMerged("/repo/.git", "feature-x")).toBe(true);
+    expect(isCachedMerged("/repo/.git", "feature-x", "sha1")).toBe(true);
   });
 
   it("swallows write failures so the cache stays best-effort", async () => {
@@ -76,6 +85,6 @@ describe("cacheMerged", () => {
     });
     const { cacheMerged } = await loadModule();
 
-    expect(() => cacheMerged("/repo/.git", "feature-x")).not.toThrow();
+    expect(() => cacheMerged("/repo/.git", "feature-x", "sha1")).not.toThrow();
   });
 });

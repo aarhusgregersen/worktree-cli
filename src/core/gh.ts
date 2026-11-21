@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { type Result, err, ok } from "../utils/result.js";
 import { executeGitCommand, getRepoId } from "./git.js";
-import { cacheMerged } from "./mergeCache.js";
 import { cachePrs, getCachedPr } from "./prCache.js";
 
 const execFileAsync = promisify(execFile);
@@ -13,6 +12,7 @@ export interface PrInfo {
   readonly url: string;
   readonly state: string;
   readonly isDraft: boolean;
+  readonly headRefOid?: string;
 }
 
 export interface CreatePrOptions {
@@ -35,14 +35,6 @@ export const isGhAvailable = async (): Promise<boolean> => {
   return ghAvailable;
 };
 
-export const isPrMerged = async (
-  branch: string,
-  cwd?: string,
-): Promise<boolean> => {
-  const prs = await getPrsForBranches([branch], { cwd });
-  return prs.get(branch)?.state === "MERGED";
-};
-
 export interface PrLookupOptions {
   readonly cwd?: string;
   // How stale a cached lookup may be; 0 always refetches.
@@ -51,7 +43,7 @@ export interface PrLookupOptions {
 
 // Large repos can trip GraphQL query complexity limits with too many aliases.
 const BRANCHES_PER_QUERY = 50;
-const PR_FIELDS = "number title url state isDraft isCrossRepository";
+const PR_FIELDS = "number title url state isDraft headRefOid isCrossRepository";
 
 const buildPrQuery = (count: number): string => {
   const indexes = Array.from({ length: count }, (_, i) => i);
@@ -147,10 +139,7 @@ export const getPrsForBranches = async (
   );
   if (fetched.size > 0) cachePrs(repoId, fetched);
 
-  for (const [branch, pr] of fetched) {
-    result.set(branch, pr);
-    if (pr?.state === "MERGED") cacheMerged(repoId, branch);
-  }
+  for (const [branch, pr] of fetched) result.set(branch, pr);
   return result;
 };
 
@@ -161,7 +150,13 @@ export const getPrForBranch = async (
   try {
     const { stdout } = await execFileAsync(
       "gh",
-      ["pr", "view", branch, "--json", "number,title,url,state,isDraft"],
+      [
+        "pr",
+        "view",
+        branch,
+        "--json",
+        "number,title,url,state,isDraft,headRefOid",
+      ],
       { cwd },
     );
     return JSON.parse(stdout.trim()) as PrInfo;

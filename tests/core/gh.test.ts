@@ -7,14 +7,12 @@ vi.mock("../../src/core/git.js", () => ({
   executeGitCommand: vi.fn(),
   getRepoId: vi.fn(async () => "/repo/.git"),
 }));
-vi.mock("../../src/core/mergeCache.js", () => ({ cacheMerged: vi.fn() }));
 vi.mock("../../src/core/prCache.js", () => ({
   getCachedPr: vi.fn(),
   cachePrs: vi.fn(),
 }));
 
 import { getPrsForBranches } from "../../src/core/gh.js";
-import { cacheMerged } from "../../src/core/mergeCache.js";
 import { cachePrs, getCachedPr } from "../../src/core/prCache.js";
 
 const node = (number: number, state: string, isCrossRepository = false) => ({
@@ -77,7 +75,6 @@ describe("getPrsForBranches", () => {
       state: "CLOSED",
       isDraft: false,
     });
-    expect(cacheMerged).not.toHaveBeenCalled();
   });
 
   it("serves cached branches without calling gh", async () => {
@@ -90,10 +87,13 @@ describe("getPrsForBranches", () => {
     expect(prs.get("feat-a")?.number).toBe(1);
   });
 
-  it("records MERGED PRs in the merged cache", async () => {
-    respond({ b0: { nodes: [node(3, "MERGED")] } });
-    await getPrsForBranches(["feat-a"]);
-    expect(cacheMerged).toHaveBeenCalledWith("/repo/.git", "feat-a");
+  it("returns the PR head SHA so merges can be checked against the local tip", async () => {
+    respond({ b0: { nodes: [{ ...node(3, "MERGED"), headRefOid: "abc" }] } });
+    const prs = await getPrsForBranches(["feat-a"]);
+    expect(prs.get("feat-a")?.headRefOid).toBe("abc");
+    expect(ghArgs().find((a) => a.startsWith("query="))).toContain(
+      "headRefOid",
+    );
   });
 
   it("omits branches and caches nothing when gh fails", async () => {
